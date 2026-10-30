@@ -15,7 +15,7 @@ if str(_root) not in sys.path:
 import yt_dlp
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
@@ -313,20 +313,28 @@ def verify_admin_key(request: Request) -> bool:
 
 
 @app.get("/", include_in_schema=False)
-async def serve_index() -> FileResponse:
+async def serve_index() -> Response:
     index_file = _resolve_static_path("index.html")
     if not index_file.is_file():
         raise HTTPException(status_code=404, detail="File index.html tidak ditemukan.")
-    return FileResponse(str(index_file))
+    try:
+        content = index_file.read_text(encoding="utf-8")
+        return HTMLResponse(content=content, headers={"Cache-Control": "public, max-age=300"})
+    except Exception:
+        return FileResponse(str(index_file))
 
 
 @app.get("/DonduFarrel", include_in_schema=False)
-async def serve_admin_page() -> FileResponse:
+async def serve_admin_page() -> Response:
     """Dashboard Admin khusus dengan URL tersembunyi /DonduFarrel."""
     admin_html = _resolve_static_path("admin.html")
     if not admin_html.is_file():
         raise HTTPException(status_code=404, detail="Halaman admin belum dibuat.")
-    return FileResponse(str(admin_html))
+    try:
+        content = admin_html.read_text(encoding="utf-8")
+        return HTMLResponse(content=content, headers={"Cache-Control": "no-store"})
+    except Exception:
+        return FileResponse(str(admin_html))
 
 
 # --- Analytics & Device Tracking ---

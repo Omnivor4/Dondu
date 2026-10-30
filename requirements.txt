@@ -4,4 +4,6 @@ yt-dlp>=2025.1.15
 pydantic>=2.9.0,<3.0.0
 python-dotenv>=1.0.1,<2.0.0
 firebase-admin>=7.0.0
+aiofiles>=23.2.0
+
 
