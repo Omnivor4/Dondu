@@ -35,13 +35,18 @@ class Settings:
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
 
     # Direktori unduhan sementara dan jadwal pembersihan
-    TEMP_DIR: Path = Path(os.getenv("TEMP_DIR", str(BASE_DIR / "temp_downloads"))).resolve()
+    # Di lingkungan serverless seperti Vercel/AWS Lambda, hanya /tmp yang dapat ditulis (writable)
+    _default_temp = "/tmp/forte_downloads" if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") else str(BASE_DIR / "temp_downloads")
+    TEMP_DIR: Path = Path(os.getenv("TEMP_DIR", _default_temp)).resolve()
     CLEANUP_MAX_AGE_MINUTES: int = int(os.getenv("CLEANUP_MAX_AGE_MINUTES", "15"))
     CLEANUP_MAX_AGE_SECONDS: int = CLEANUP_MAX_AGE_MINUTES * 60
     CLEANUP_INTERVAL_SECONDS: int = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "120"))
 
     # Opsional: file cookies Netscape untuk platform yang membutuhkan sesi
     COOKIES_FILE: str = os.getenv("COOKIES_FILE", "").strip()
+
+    # Opsional: lokasi binary FFmpeg kustom
+    FFMPEG_LOCATION: str = os.getenv("FFMPEG_LOCATION", "").strip()
 
     # Pilihan kualitas standar
     STANDARD_VIDEO_HEIGHTS: tuple[int, ...] = (360, 480, 720, 1080, 1440, 2160)

@@ -99,8 +99,21 @@ def sanitize_thumbnail_url(url: Optional[str]) -> Optional[str]:
 _sanitize_thumbnail_url = sanitize_thumbnail_url
 
 
+def get_ffmpeg_path() -> Optional[str]:
+    if settings.FFMPEG_LOCATION and Path(settings.FFMPEG_LOCATION).exists():
+        return settings.FFMPEG_LOCATION
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    try:
+        import imageio_ffmpeg  # type: ignore
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
 def is_ffmpeg_available() -> bool:
-    return shutil.which("ffmpeg") is not None
+    return get_ffmpeg_path() is not None
 
 
 def format_duration(seconds: Optional[int | float]) -> str:
@@ -255,6 +268,9 @@ def _base_ytdlp_opts() -> dict[str, Any]:
     }
     if settings.COOKIES_FILE and Path(settings.COOKIES_FILE).is_file():
         opts["cookiefile"] = settings.COOKIES_FILE
+    ffmpeg_path = get_ffmpeg_path()
+    if ffmpeg_path:
+        opts["ffmpeg_location"] = ffmpeg_path
     return opts
 
 
