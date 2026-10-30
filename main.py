@@ -10,3 +10,4 @@ if str(ROOT_DIR) not in sys.path:
 os.environ.setdefault("TRUST_PROXY_HEADERS", "true")
 
 from app.main import app
+

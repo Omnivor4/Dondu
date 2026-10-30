@@ -160,51 +160,6 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comments_created ON comments(created_at DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status)")
 
-        # Pre-seed initial default comments if empty
-        cursor.execute("SELECT COUNT(*) FROM comments")
-        if cursor.fetchone()[0] == 0:
-            now = datetime.now(timezone.utc).isoformat()
-            default_comments = [
-                (
-                    "c_init_1",
-                    "FarreL",
-                    "Developer",
-                    "Sistem pipeline Dondu v2.0 stabil. Kecepatan transcode H.264 & audio MP3 berjalan normal tanpa kompresi berlebih. Silakan tinggalkan kritik atau saran di sini!",
-                    now,
-                    "active",
-                    "dev_device",
-                    1,
-                ),
-                (
-                    "c_init_2",
-                    "Alex Pratama",
-                    "User",
-                    "UI-nya bersih banget tanpa gradasi dan warna terracotta-nya enak di mata. Unduh video TikTok jernih langsung masuk tanpa watermark.",
-                    now,
-                    "active",
-                    "guest_device_1",
-                    0,
-                ),
-                (
-                    "c_init_3",
-                    "Rian Saputra",
-                    "",
-                    "Fitur keyboard shortcut Ctrl+V sangat membantu buat paste cepat. Mantap!",
-                    now,
-                    "active",
-                    "guest_device_2",
-                    0,
-                ),
-            ]
-            cursor.executemany(
-                """
-                INSERT INTO comments (id, author, badge, text, created_at, status, device_id, is_pinned)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                default_comments,
-            )
-            conn.commit()
-
 
 # --- Device Analytics Tracking Functions ---
 

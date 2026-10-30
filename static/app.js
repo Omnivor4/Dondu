@@ -739,31 +739,7 @@
 
   // --- 9. Comments Module (Interactive & Persistent Engine) ---
   const CommentsManager = {
-    STORAGE_KEY: "dondu_comments_v1",
-
-    defaultComments: [
-      {
-        id: "c_1",
-        author: "FarreL",
-        badge: "Developer",
-        text: "Sistem pipeline Dondu v2.0 stabil. Kecepatan transcode H.264 & audio MP3 berjalan normal tanpa kompresi berlebih. Silakan tinggalkan kritik atau saran di sini!",
-        timestamp: new Date(Date.now() - 3600 * 1000 * 2).toISOString(),
-      },
-      {
-        id: "c_2",
-        author: "Alex Pratama",
-        badge: "User",
-        text: "UI-nya bersih banget tanpa gradasi dan warna terracotta-nya enak di mata. Unduh video TikTok jernih langsung masuk tanpa watermark.",
-        timestamp: new Date(Date.now() - 3600 * 1000 * 5).toISOString(),
-      },
-      {
-        id: "c_3",
-        author: "Rian Saputra",
-        badge: "",
-        text: "Fitur keyboard shortcut Ctrl+V sangat membantu buat paste cepat. Mantap!",
-        timestamp: new Date(Date.now() - 3600 * 1000 * 24).toISOString(),
-      },
-    ],
+    STORAGE_KEY: "dondu_comments_prod",
 
     async init() {
       if (!DOM.commentForm || !DOM.commentsList) return;
@@ -777,7 +753,7 @@
         const res = await fetch("/api/comments");
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data.comments) && data.comments.length > 0) {
+          if (Array.isArray(data.comments)) {
             const normalized = data.comments.map((c) => ({
               id: c.id,
               author: c.author,
@@ -796,14 +772,12 @@
     getComments() {
       try {
         const raw = localStorage.getItem(this.STORAGE_KEY);
-        if (!raw) {
-          this.saveComments(this.defaultComments);
-          return [...this.defaultComments];
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
         }
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (_) {}
-      return [...this.defaultComments];
+      return [];
     },
 
     saveComments(comments) {
