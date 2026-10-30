@@ -1,5 +1,7 @@
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.validators import validate_task_id
 
 
 class VideoInfoRequest(BaseModel):
@@ -31,10 +33,14 @@ class DownloadRequest(BaseModel):
     quality: str = Field(default="best", description="Resolusi video (best, 360, 480, 720, 1080, 1440, 2160) atau bitrate MP3 (128, 192, 256, 320)")
     task_id: Optional[str] = Field(default=None, max_length=64, description="ID tugas opsional untuk pelacakan progres real-time")
 
+    @field_validator("task_id")
+    @classmethod
+    def validate_task_id_field(cls, v: Optional[str]) -> Optional[str]:
+        return validate_task_id(v)
+
 
 class ProgressResponse(BaseModel):
     task_id: str
     status: str
     percent: float
     message: str
-

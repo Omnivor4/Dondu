@@ -16,6 +16,13 @@ class Settings:
     PORT: int = int(os.getenv("PORT", "8000"))
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
+    # Keamanan dan proxy
+    TRUST_PROXY_HEADERS: bool = os.getenv("TRUST_PROXY_HEADERS", "false").lower() in ("1", "true", "yes")
+    ENABLE_DOCS: bool = os.getenv("ENABLE_DOCS", "false").lower() in ("1", "true", "yes")
+    MAX_CONCURRENT_INFO: int = int(os.getenv("MAX_CONCURRENT_INFO", "8"))
+    MAX_CONCURRENT_DOWNLOADS: int = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "3"))
+    RESOLVE_DNS_SSRF_CHECK: bool = os.getenv("RESOLVE_DNS_SSRF_CHECK", "false").lower() in ("1", "true", "yes")
+
     # Batas durasi maksimum dalam menit (default: 60 menit)
     MAX_DURATION_MINUTES: int = int(os.getenv("MAX_DURATION_MINUTES", "60"))
     MAX_DURATION_SECONDS: int = MAX_DURATION_MINUTES * 60

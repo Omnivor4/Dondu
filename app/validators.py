@@ -1,6 +1,11 @@
+import ipaddress
 import re
+import socket
 import unicodedata
+from typing import Optional
 from urllib.parse import quote, urlparse
+
+from app.config import settings
 
 
 PLATFORM_DOMAINS: dict[str, tuple[str, ...]] = {
@@ -33,9 +38,80 @@ PLATFORM_DOMAINS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+TASK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
 
 class URLValidationError(ValueError):
     """Dilempar ketika URL tidak valid atau berasal dari domain yang tidak didukung."""
+
+
+def is_forbidden_host_or_ip(hostname: str, resolve_dns: bool = False) -> bool:
+    """
+    Memeriksa apakah hostname atau IP address terlarang (SSRF protection):
+    - localhost atau domain internal (.local, .internal, .arpa, .localhost)
+    - Alamat IP privat, loopback, link-local, multicast, reserved, unspecified
+    - Opsional: resolusi DNS aktif untuk memeriksa IP di balik hostname
+    """
+    if not hostname:
+        return True
+
+    host = hostname.lower().strip(".")
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+
+    # Selalu blokir localhost dan domain internal
+    if host == "localhost" or host.endswith((".local", ".internal", ".arpa", ".localhost")):
+        return True
+
+    def _is_ip_forbidden(ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+        return (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_link_local
+            or ip_obj.is_multicast
+            or ip_obj.is_reserved
+            or ip_obj.is_unspecified
+        )
+
+    # Cek jika literal IP
+    try:
+        ip = ipaddress.ip_address(host)
+        return _is_ip_forbidden(ip)
+    except ValueError:
+        pass
+
+    # Opsional: resolusi DNS aktif
+    if resolve_dns:
+        try:
+            addr_info = socket.getaddrinfo(host, None)
+            for entry in addr_info:
+                ip_str = entry[4][0]
+                try:
+                    resolved_ip = ipaddress.ip_address(ip_str)
+                    if _is_ip_forbidden(resolved_ip):
+                        return True
+                except ValueError:
+                    continue
+        except (socket.gaierror, OSError):
+            pass
+
+    return False
+
+
+def validate_task_id(task_id: Optional[str]) -> Optional[str]:
+    """
+    Memvalidasi format task_id.
+    Mengembalikan None jika task_id bernilai None atau string kosong.
+    Mengembalikan task_id jika valid sesuai pola alphanumerik, underscore, dan hyphen (1-64 karakter).
+    Melempar URLValidationError jika format tidak valid.
+    """
+    if task_id is None or task_id == "":
+        return None
+
+    if not isinstance(task_id, str) or not TASK_ID_PATTERN.match(task_id):
+        raise URLValidationError("Format ID tugas (task_id) tidak valid.")
+
+    return task_id
 
 
 def validate_and_identify_url(raw_url: str) -> tuple[str, str]:
@@ -57,9 +133,28 @@ def validate_and_identify_url(raw_url: str) -> tuple[str, str]:
     except Exception as exc:
         raise URLValidationError("Format tautan tidak dapat dikenali. Periksa kembali URL Anda.") from exc
 
+    try:
+        has_credentials = bool(parsed.username or parsed.password)
+    except ValueError as exc:
+        raise URLValidationError("Tautan tidak boleh memuat kredensial autentikasi.") from exc
+
+    if has_credentials:
+        raise URLValidationError("Tautan tidak boleh memuat kredensial autentikasi.")
+
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise URLValidationError("Port pada tautan tidak diizinkan. Gunakan port standar HTTP/HTTPS.") from exc
+
+    if port not in (None, 80, 443):
+        raise URLValidationError("Port pada tautan tidak diizinkan. Gunakan port standar HTTP/HTTPS.")
+
     hostname = (parsed.hostname or "").lower().strip(".")
     if not hostname:
         raise URLValidationError("Tautan tidak memiliki nama domain yang valid.")
+
+    if is_forbidden_host_or_ip(hostname, resolve_dns=settings.RESOLVE_DNS_SSRF_CHECK):
+        raise URLValidationError("Tautan menuju alamat jaringan internal atau lokal tidak diizinkan.")
 
     for platform, allowed_roots in PLATFORM_DOMAINS.items():
         for root in allowed_roots:
@@ -117,4 +212,3 @@ def build_content_disposition(filename: str) -> str:
 
     utf8_quoted = quote(filename, safe="")
     return f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{utf8_quoted}'
-
