@@ -19,9 +19,16 @@ from app.config import BASE_DIR
 logger = logging.getLogger("dondu.db")
 
 is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
-DATA_DIR: Path = Path("/tmp/dondu_data") if is_serverless else BASE_DIR / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH: Path = DATA_DIR / "dondu.db"
+if is_serverless:
+    DATA_DIR: Path = Path("/tmp")
+    DB_PATH: Path = Path("/tmp/dondu.db")
+else:
+    DATA_DIR: Path = BASE_DIR / "data"
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    DB_PATH: Path = DATA_DIR / "dondu.db"
 
 # Inisialisasi Firebase Admin SDK jika file kredensial atau env var tersedia
 firestore_client = None
@@ -33,7 +40,10 @@ try:
     service_account_raw = os.getenv("FIREBASE_SERVICE_ACCOUNT") or os.getenv("FIREBASE_CREDENTIALS")
     if service_account_raw:
         try:
-            service_account_info = json.loads(service_account_raw)
+            cleaned = service_account_raw.strip().strip("'\"")
+            service_account_info = json.loads(cleaned)
+            if isinstance(service_account_info, dict) and "private_key" in service_account_info:
+                service_account_info["private_key"] = service_account_info["private_key"].replace("\\n", "\n")
             cred = credentials.Certificate(service_account_info)
         except Exception:
             if Path(service_account_raw).exists():
@@ -45,10 +55,10 @@ try:
             cred = credentials.Certificate(str(key_files[0]))
 
     if cred:
-        try:
-            firebase_app = firebase_admin.get_app()
-        except ValueError:
+        if not firebase_admin._apps:
             firebase_app = firebase_admin.initialize_app(cred)
+        else:
+            firebase_app = firebase_admin.get_app()
         firestore_client = firestore.client()
         logger.info("Firebase Admin terhubung ke project: %s", firebase_app.project_id)
 except Exception as exc:
@@ -489,5 +499,8 @@ def delete_comment(comment_id: str) -> bool:
     return deleted
 
 
-# Initialize on import
-init_db()
+# Initialize on import safely
+try:
+    init_db()
+except Exception as _db_err:
+    logger.warning("Gagal inisialisasi awal database SQLite: %s", _db_err)

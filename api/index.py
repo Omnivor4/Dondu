@@ -12,15 +12,14 @@ os.environ.setdefault("TRUST_PROXY_HEADERS", "true")
 
 try:
     from app.main import app
-    handler = app
 except Exception as exc:
     err_tb = traceback.format_exc()
     from fastapi import FastAPI
     from fastapi.responses import HTMLResponse
 
-    error_app = FastAPI()
+    app = FastAPI()
 
-    @error_app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
+    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"])
     async def crash_handler(path: str = ""):
         return HTMLResponse(
             content=f"""
@@ -32,6 +31,3 @@ except Exception as exc:
             """,
             status_code=200,
         )
-
-    handler = error_app
-    app = error_app
