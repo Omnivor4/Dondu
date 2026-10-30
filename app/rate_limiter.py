@@ -2,6 +2,7 @@ import math
 import time
 from collections import deque
 from threading import Lock
+from typing import Any, Optional
 from fastapi import HTTPException, Request, status
 
 
@@ -11,24 +12,60 @@ class SlidingWindowRateLimiter:
     Aman untuk multi-thread dan membersihkan entri kedaluwarsa secara berkala.
     """
 
-    def __init__(self, max_requests: int = 10, window_seconds: int = 60) -> None:
+    def __init__(
+        self,
+        max_requests: int = 10,
+        window_seconds: int = 60,
+        trust_proxy_headers: bool = False,
+        max_tracked_ips: int = 10000,
+    ) -> None:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
+        self.trust_proxy_headers = trust_proxy_headers
+        self.max_tracked_ips = max_tracked_ips
         self._hits: dict[str, deque[float]] = {}
         self._lock = Lock()
         self._last_gc = time.monotonic()
 
-    @staticmethod
-    def get_client_ip(request: Request) -> str:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip.strip()
-        if request.client and request.client.host:
-            return request.client.host
-        return "unknown"
+    def get_client_ip(self, request: Any = None) -> str:
+        # Dukung pemanggilan sebagai method instance (self.get_client_ip(request))
+        # maupun pemanggilan secara static (SlidingWindowRateLimiter.get_client_ip(request))
+        if isinstance(self, SlidingWindowRateLimiter):
+            req = request
+            trust = self.trust_proxy_headers
+        else:
+            req = self
+            trust = False
+
+        if req is None:
+            return "unknown"
+
+        raw_ip: Optional[str] = None
+        headers = getattr(req, "headers", {}) or {}
+
+        if trust:
+            forwarded = headers.get("x-forwarded-for")
+            if forwarded:
+                raw_ip = str(forwarded).split(",")[0].strip()
+            elif headers.get("x-real-ip"):
+                raw_ip = str(headers.get("x-real-ip")).strip()
+
+        if not raw_ip:
+            client = getattr(req, "client", None)
+            if client and getattr(client, "host", None):
+                raw_ip = str(client.host).strip()
+
+        if not raw_ip:
+            return "unknown"
+
+        cleaned = raw_ip.strip()
+        if not cleaned:
+            return "unknown"
+
+        if len(cleaned) > 64:
+            cleaned = cleaned[:64]
+
+        return cleaned
 
     def check(self, request: Request) -> None:
         now = time.monotonic()
@@ -45,6 +82,12 @@ class SlidingWindowRateLimiter:
                 for ip in expired_ips:
                     self._hits.pop(ip, None)
                 self._last_gc = now
+
+            # Batasi memori: evict entri tertua jika kapasitas maksimum tercapai
+            if client_ip not in self._hits and len(self._hits) >= self.max_tracked_ips:
+                if self._hits:
+                    oldest_ip = next(iter(self._hits))
+                    self._hits.pop(oldest_ip, None)
 
             bucket = self._hits.get(client_ip)
             if bucket is None:

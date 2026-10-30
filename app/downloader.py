@@ -13,7 +13,7 @@ from yt_dlp.utils import DownloadError, ExtractorError
 
 from app.config import settings
 from app.schemas import QualityOption, VideoInfoResponse
-from app.validators import sanitize_filename, validate_and_identify_url
+from app.validators import URLValidationError, sanitize_filename, validate_and_identify_url
 
 logger = logging.getLogger("forte.downloader")
 
@@ -38,7 +38,8 @@ class TaskProgress:
 class ProgressTracker:
     """Penyimpanan progres unduhan sementara di memori (tanpa menyimpan data pengguna)."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_entries: int = 2000) -> None:
+        self.max_entries = max_entries
         self._store: dict[str, TaskProgress] = {}
         self._lock = Lock()
 
@@ -46,6 +47,11 @@ class ProgressTracker:
         if not task_id:
             return
         with self._lock:
+            if task_id not in self._store and len(self._store) >= self.max_entries:
+                if self._store:
+                    oldest_id = next(iter(self._store))
+                    self._store.pop(oldest_id, None)
+
             self._store[task_id] = TaskProgress(
                 status=status,
                 percent=round(max(0.0, min(100.0, percent)), 1),
@@ -71,6 +77,28 @@ class ProgressTracker:
 progress_tracker = ProgressTracker()
 
 
+def sanitize_thumbnail_url(url: Optional[str]) -> Optional[str]:
+    """
+    Memvalidasi dan membersihkan URL thumbnail.
+    Mengembalikan url.strip() HANYA jika berupa string dengan panjang <= 2048,
+    diawali dengan https:// atau http://, serta tidak memuat spasi atau karakter kontrol.
+    Selain itu mengembalikan None.
+    """
+    if not isinstance(url, str):
+        return None
+    cleaned = url.strip()
+    if not cleaned or len(cleaned) > 2048:
+        return None
+    if not (cleaned.startswith("https://") or cleaned.startswith("http://")):
+        return None
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in cleaned):
+        return None
+    return cleaned
+
+
+_sanitize_thumbnail_url = sanitize_thumbnail_url
+
+
 def is_ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
 
@@ -90,6 +118,9 @@ def map_ytdlp_error(exc: Exception) -> DownloaderUserError:
     """Mengubah exception teknis yt-dlp/FFmpeg menjadi pesan bahasa Indonesia yang ramah pengguna."""
     if isinstance(exc, DownloaderUserError):
         return exc
+
+    if isinstance(exc, URLValidationError):
+        return DownloaderUserError(str(exc), status_code=400)
 
     raw = str(exc).lower()
 
@@ -211,6 +242,8 @@ def _base_ytdlp_opts() -> dict[str, Any]:
         "retries": 3,
         "fragment_retries": 3,
         "nocheckcertificate": False,
+        "allowed_protocols": ["http", "https"],
+        "max_downloads": 1,
         "http_headers": {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -312,6 +345,10 @@ def extract_video_info(raw_url: str) -> VideoInfoResponse:
             raise DownloaderUserError("Postingan tersebut tidak memuat video yang dapat diunduh.", status_code=404)
         info = entries[0]
 
+    resolved_url = info.get("webpage_url") or info.get("original_url")
+    if resolved_url:
+        validate_and_identify_url(str(resolved_url))
+
     if info.get("is_live"):
         raise DownloaderUserError(
             "Siaran langsung (live stream) yang sedang berlangsung tidak didukung.",
@@ -342,6 +379,8 @@ def extract_video_info(raw_url: str) -> VideoInfoResponse:
     if not thumbnail and isinstance(info.get("thumbnails"), list) and info["thumbnails"]:
         thumbnail = info["thumbnails"][-1].get("url")
 
+    safe_thumbnail = sanitize_thumbnail_url(thumbnail)
+
     duration_int = int(round(duration)) if isinstance(duration, (int, float)) and duration > 0 else None
 
     return VideoInfoResponse(
@@ -349,7 +388,7 @@ def extract_video_info(raw_url: str) -> VideoInfoResponse:
         uploader=str(uploader),
         duration=duration_int,
         duration_string=format_duration(duration_int),
-        thumbnail=thumbnail,
+        thumbnail=safe_thumbnail,
         platform=platform,
         webpage_url=info.get("webpage_url") or clean_url,
         video_qualities=video_qualities,
@@ -507,6 +546,10 @@ def download_media(
                 if not entries:
                     raise DownloaderUserError("Postingan tidak memuat media.", status_code=404)
                 info = entries[0]
+
+            resolved_url = info.get("webpage_url") or info.get("original_url")
+            if resolved_url:
+                validate_and_identify_url(str(resolved_url))
 
             if info.get("is_live"):
                 raise DownloaderUserError(
