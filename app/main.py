@@ -313,6 +313,9 @@ def verify_admin_key(request: Request) -> bool:
 
 
 @app.get("/", include_in_schema=False)
+@app.get("/api", include_in_schema=False)
+@app.get("/api/", include_in_schema=False)
+@app.get("/api/index.py", include_in_schema=False)
 async def serve_index() -> Response:
     index_file = _resolve_static_path("index.html")
     if not index_file.is_file():
@@ -325,6 +328,8 @@ async def serve_index() -> Response:
 
 
 @app.get("/DonduFarrel", include_in_schema=False)
+@app.get("/api/DonduFarrel", include_in_schema=False)
+@app.get("/api/index.py/DonduFarrel", include_in_schema=False)
 async def serve_admin_page() -> Response:
     """Dashboard Admin khusus dengan URL tersembunyi /DonduFarrel."""
     admin_html = _resolve_static_path("admin.html")
