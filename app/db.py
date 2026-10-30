@@ -21,6 +21,24 @@ DATA_DIR: Path = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH: Path = DATA_DIR / "dondu.db"
 
+# Inisialisasi Firebase Admin SDK jika file kredensial tersedia
+firestore_client = None
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+
+    key_files = list(BASE_DIR.glob("*firebase-adminsdk*.json"))
+    if key_files:
+        cred = credentials.Certificate(str(key_files[0]))
+        try:
+            firebase_app = firebase_admin.get_app()
+        except ValueError:
+            firebase_app = firebase_admin.initialize_app(cred)
+        firestore_client = firestore.client()
+        logger.info("Firebase Admin terhubung ke project: %s", firebase_app.project_id)
+except Exception as exc:
+    logger.debug("Firebase Admin tidak diinisialisasi: %s", exc)
+
 
 def parse_device_info(user_agent: str, platform: str) -> Dict[str, str]:
     """Parse user-agent and platform into human-readable OS, browser, and device type."""
@@ -233,6 +251,21 @@ def record_device_visit(
             )
             visit_count = 1
 
+    if firestore_client:
+        try:
+            firestore_client.collection("devices").document(clean_id).set({
+                "device_id": clean_id,
+                "last_seen_at": now,
+                "visit_count": visit_count,
+                "os": parsed["os"],
+                "browser": parsed["browser"],
+                "device_type": parsed["device_type"],
+                "screen_res": screen_res,
+                "language": language,
+            }, merge=True)
+        except Exception as e:
+            logger.debug("Firestore device sync: %s", e)
+
     return {
         "device_id": clean_id,
         "visit_count": visit_count,
@@ -346,6 +379,21 @@ def add_comment(
             (cid, clean_author, clean_badge, clean_text, now, device_id, 1 if is_pinned else 0),
         )
 
+    if firestore_client:
+        try:
+            firestore_client.collection("comments").document(cid).set({
+                "id": cid,
+                "author": clean_author,
+                "badge": clean_badge,
+                "text": clean_text,
+                "created_at": now,
+                "status": "active",
+                "device_id": device_id,
+                "is_pinned": bool(is_pinned),
+            })
+        except Exception as e:
+            logger.debug("Firestore add_comment: %s", e)
+
     return {
         "id": cid,
         "author": clean_author,
@@ -388,6 +436,18 @@ def update_comment(
             (new_author, new_text, new_badge, new_status, new_pinned, comment_id),
         )
 
+        if firestore_client:
+            try:
+                firestore_client.collection("comments").document(comment_id).update({
+                    "author": new_author,
+                    "text": new_text,
+                    "badge": new_badge,
+                    "status": new_status,
+                    "is_pinned": bool(new_pinned),
+                })
+            except Exception as e:
+                logger.debug("Firestore update_comment: %s", e)
+
         return {
             "id": comment_id,
             "author": new_author,
@@ -403,7 +463,15 @@ def delete_comment(comment_id: str) -> bool:
     """Soft deletes or hard deletes a comment."""
     with get_db_cursor() as cursor:
         cursor.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
-        return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+
+    if deleted and firestore_client:
+        try:
+            firestore_client.collection("comments").document(comment_id).delete()
+        except Exception as e:
+            logger.debug("Firestore delete_comment: %s", e)
+
+    return deleted
 
 
 # Initialize on import
