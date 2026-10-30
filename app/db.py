@@ -5,6 +5,7 @@ Handles Device Analytics Recognition & Comments CRUD
 
 import json
 import logging
+import os
 import re
 import sqlite3
 import uuid
@@ -17,19 +18,33 @@ from app.config import BASE_DIR
 
 logger = logging.getLogger("dondu.db")
 
-DATA_DIR: Path = BASE_DIR / "data"
+is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+DATA_DIR: Path = Path("/tmp/dondu_data") if is_serverless else BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH: Path = DATA_DIR / "dondu.db"
 
-# Inisialisasi Firebase Admin SDK jika file kredensial tersedia
+# Inisialisasi Firebase Admin SDK jika file kredensial atau env var tersedia
 firestore_client = None
 try:
     import firebase_admin
     from firebase_admin import credentials, firestore
 
-    key_files = list(BASE_DIR.glob("*firebase-adminsdk*.json"))
-    if key_files:
-        cred = credentials.Certificate(str(key_files[0]))
+    cred = None
+    service_account_raw = os.getenv("FIREBASE_SERVICE_ACCOUNT") or os.getenv("FIREBASE_CREDENTIALS")
+    if service_account_raw:
+        try:
+            service_account_info = json.loads(service_account_raw)
+            cred = credentials.Certificate(service_account_info)
+        except Exception:
+            if Path(service_account_raw).exists():
+                cred = credentials.Certificate(service_account_raw)
+
+    if not cred:
+        key_files = list(BASE_DIR.glob("*firebase-adminsdk*.json"))
+        if key_files:
+            cred = credentials.Certificate(str(key_files[0]))
+
+    if cred:
         try:
             firebase_app = firebase_admin.get_app()
         except ValueError:
