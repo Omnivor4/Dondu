@@ -23,12 +23,12 @@ class Settings:
     MAX_CONCURRENT_DOWNLOADS: int = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "3"))
     RESOLVE_DNS_SSRF_CHECK: bool = os.getenv("RESOLVE_DNS_SSRF_CHECK", "false").lower() in ("1", "true", "yes")
 
-    # Batas durasi maksimum dalam menit (default: 60 menit)
-    MAX_DURATION_MINUTES: int = int(os.getenv("MAX_DURATION_MINUTES", "60"))
+    # Batas durasi maksimum dalam menit (default: 0 = tanpa batas / unlimited)
+    MAX_DURATION_MINUTES: int = int(os.getenv("MAX_DURATION_MINUTES", "0"))
     MAX_DURATION_SECONDS: int = MAX_DURATION_MINUTES * 60
 
-    # Batas ukuran file maksimum dalam MB (default: 500 MB)
-    MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "500"))
+    # Batas ukuran file maksimum dalam MB (default: 0 = tanpa batas / unlimited)
+    MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "0"))
     MAX_FILE_SIZE_BYTES: int = MAX_FILE_SIZE_MB * 1024 * 1024
 
     # Rate limit per IP per menit (default: 10 req/menit)

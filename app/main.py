@@ -32,6 +32,7 @@ from app.schemas import (
 from app.validators import (
     URLValidationError,
     build_content_disposition,
+    validate_task_id,
 )
 
 logging.basicConfig(
@@ -44,7 +45,17 @@ logger = logging.getLogger("forte.main")
 rate_limiter = SlidingWindowRateLimiter(
     max_requests=settings.RATE_LIMIT_PER_MINUTE,
     window_seconds=60,
+    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
 )
+
+progress_rate_limiter = SlidingWindowRateLimiter(
+    max_requests=120,
+    window_seconds=60,
+    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
+)
+
+info_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_INFO)
+download_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_DOWNLOADS)
 
 
 async def _periodic_cleanup_loop() -> None:
@@ -65,14 +76,16 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(cleanup_expired_temp_dirs)
 
     ffmpeg_ok = is_ffmpeg_available()
+    dur_str = f"{settings.MAX_DURATION_MINUTES}m" if settings.MAX_DURATION_MINUTES > 0 else "Tanpa Batas"
+    size_str = f"{settings.MAX_FILE_SIZE_MB}MB" if settings.MAX_FILE_SIZE_MB > 0 else "Tanpa Batas"
     logger.info(
-        "Memulai %s v%s | FFmpeg=%s | yt-dlp=%s | MaxDurasi=%dm | MaxUkuran=%dMB | RateLimit=%d/mnt",
+        "Memulai %s v%s | FFmpeg=%s | yt-dlp=%s | MaxDurasi=%s | MaxUkuran=%s | RateLimit=%d/mnt",
         settings.APP_NAME,
         settings.VERSION,
         "Tersedia" if ffmpeg_ok else "TIDAK DITEMUKAN",
         yt_dlp.version.__version__,
-        settings.MAX_DURATION_MINUTES,
-        settings.MAX_FILE_SIZE_MB,
+        dur_str,
+        size_str,
         settings.RATE_LIMIT_PER_MINUTE,
     )
     if not ffmpeg_ok:
@@ -95,9 +108,25 @@ app = FastAPI(
     description=settings.APP_TAGLINE,
     version=settings.VERSION,
     lifespan=lifespan,
-    docs_url="/docs",
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
     redoc_url=None,
 )
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; img-src 'self' https: http: data:; "
+        "style-src 'self' 'unsafe-inline'; script-src 'self'; "
+        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    )
+    return response
 
 
 @app.exception_handler(URLValidationError)
@@ -135,7 +164,6 @@ async def health_check() -> dict:
         "app": settings.APP_NAME,
         "version": settings.VERSION,
         "ffmpeg_installed": is_ffmpeg_available(),
-        "yt_dlp_version": yt_dlp.version.__version__,
         "limits": {
             "max_duration_minutes": settings.MAX_DURATION_MINUTES,
             "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
@@ -149,13 +177,25 @@ async def health_check() -> dict:
 async def get_video_info(payload: VideoInfoRequest, request: Request) -> VideoInfoResponse:
     """Memvalidasi tautan dan mengambil metadata serta daftar kualitas yang tersedia tanpa mengunduh."""
     rate_limiter.check(request)
-    logger.info("Mengecek informasi media untuk permintaan baru.")
-    return await asyncio.to_thread(extract_video_info, payload.url)
+    try:
+        await asyncio.wait_for(info_semaphore.acquire(), timeout=2.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=503,
+            detail="Server sedang sibuk memproses banyak permintaan. Silakan coba lagi beberapa detik.",
+        )
+    try:
+        logger.info("Mengecek informasi media untuk permintaan baru.")
+        return await asyncio.to_thread(extract_video_info, payload.url)
+    finally:
+        info_semaphore.release()
 
 
 @app.get("/api/progress/{task_id}", response_model=ProgressResponse, tags=["Downloader"])
-async def get_download_progress(task_id: str) -> ProgressResponse:
+async def get_download_progress(task_id: str, request: Request) -> ProgressResponse:
     """Mengambil status progres unduhan secara real-time berdasarkan task_id."""
+    progress_rate_limiter.check(request)
+    validate_task_id(task_id)
     prog = progress_tracker.get(task_id)
     return ProgressResponse(
         task_id=task_id,
@@ -169,19 +209,32 @@ async def get_download_progress(task_id: str) -> ProgressResponse:
 async def download_video_or_audio(payload: DownloadRequest, request: Request) -> FileResponse:
     """Mengunduh video (MP4) atau audio (MP3) dan menghapusnya otomatis setelah dikirim ke browser."""
     rate_limiter.check(request)
-    logger.info(
-        "Memulai proses unduh | format=%s | kualitas=%s",
-        payload.format_type,
-        payload.quality,
-    )
+    validate_task_id(payload.task_id)
 
-    result = await asyncio.to_thread(
-        download_media,
-        payload.url,
-        payload.format_type,
-        payload.quality,
-        payload.task_id,
-    )
+    try:
+        await asyncio.wait_for(download_semaphore.acquire(), timeout=2.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=503,
+            detail="Server sedang memproses batas maksimum unduhan bersamaan. Silakan tunggu beberapa detik lalu coba lagi.",
+        )
+
+    try:
+        logger.info(
+            "Memulai proses unduh | format=%s | kualitas=%s",
+            payload.format_type,
+            payload.quality,
+        )
+
+        result = await asyncio.to_thread(
+            download_media,
+            payload.url,
+            payload.format_type,
+            payload.quality,
+            payload.task_id,
+        )
+    finally:
+        download_semaphore.release()
 
     if not result.file_path.is_file():
         remove_temp_dir(result.temp_dir)

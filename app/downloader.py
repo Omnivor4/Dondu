@@ -356,7 +356,7 @@ def extract_video_info(raw_url: str) -> VideoInfoResponse:
         )
 
     duration = info.get("duration")
-    if isinstance(duration, (int, float)) and duration > settings.MAX_DURATION_SECONDS:
+    if settings.MAX_DURATION_SECONDS > 0 and isinstance(duration, (int, float)) and duration > settings.MAX_DURATION_SECONDS:
         max_min = settings.MAX_DURATION_MINUTES
         actual_min = int(round(duration / 60))
         raise DownloaderUserError(
@@ -465,7 +465,9 @@ def download_media(
             downloaded = d.get("downloaded_bytes") or 0
             total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
 
-            if downloaded > settings.MAX_FILE_SIZE_BYTES or total > settings.MAX_FILE_SIZE_BYTES:
+            if settings.MAX_FILE_SIZE_BYTES > 0 and (
+                downloaded > settings.MAX_FILE_SIZE_BYTES or total > settings.MAX_FILE_SIZE_BYTES
+            ):
                 raise DownloaderUserError(
                     f"Ukuran file melebihi batas maksimum ({settings.MAX_FILE_SIZE_MB} MB).",
                     status_code=413,
@@ -500,7 +502,8 @@ def download_media(
     def _run_ydl(embed_thumb: bool = True) -> dict[str, Any]:
         opts = _base_ytdlp_opts()
         opts["outtmpl"] = str(job_dir / "media.%(ext)s")
-        opts["max_filesize"] = settings.MAX_FILE_SIZE_BYTES
+        if settings.MAX_FILE_SIZE_BYTES > 0:
+            opts["max_filesize"] = settings.MAX_FILE_SIZE_BYTES
         opts["progress_hooks"] = [_progress_hook]
 
         if format_type == "audio":
@@ -558,7 +561,7 @@ def download_media(
                 )
 
             duration = info.get("duration")
-            if isinstance(duration, (int, float)) and duration > settings.MAX_DURATION_SECONDS:
+            if settings.MAX_DURATION_SECONDS > 0 and isinstance(duration, (int, float)) and duration > settings.MAX_DURATION_SECONDS:
                 raise DownloaderUserError(
                     f"Durasi video melebihi batas maksimum ({settings.MAX_DURATION_MINUTES} menit).",
                     status_code=400,
@@ -572,6 +575,9 @@ def download_media(
         try:
             info_dict = _run_ydl(embed_thumb=(format_type == "audio"))
         except (DownloadError, ExtractorError, Exception) as first_err:
+            # Lewati retry jika error adalah kesalahan validasi atau kesalahan pengguna
+            if isinstance(first_err, (URLValidationError, DownloaderUserError)):
+                raise first_err
             # Jika pengunduhan MP3 gagal hanya karena thumbnail gagal diunduh/di-embed,
             # ulangi tanpa thumbnail agar pengguna tetap mendapatkan file MP3 dengan metadata
             if format_type == "audio" and "thumbnail" in str(first_err).lower():
@@ -596,7 +602,7 @@ def download_media(
             expected_file = max(candidates, key=lambda p: p.stat().st_size)
 
         file_size = expected_file.stat().st_size
-        if file_size > settings.MAX_FILE_SIZE_BYTES:
+        if settings.MAX_FILE_SIZE_BYTES > 0 and file_size > settings.MAX_FILE_SIZE_BYTES:
             raise DownloaderUserError(
                 f"Ukuran file hasil unduhan melebihi batas maksimum ({settings.MAX_FILE_SIZE_MB} MB).",
                 status_code=413,

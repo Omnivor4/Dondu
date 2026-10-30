@@ -241,6 +241,10 @@
     }
   }
 
+  function isSafeHttpUrl(url) {
+    return typeof url === "string" && /^https?:\/\/[^\s"'<>]+$/i.test(url.trim());
+  }
+
   function populatePreviewCard(data) {
     currentMediaInfo = data;
     previewPlatform.textContent = data.platform || "Video";
@@ -248,7 +252,7 @@
     previewTitle.textContent = data.title || "Tanpa Judul";
     previewUploader.textContent = data.uploader ? `Oleh ${data.uploader}` : "";
 
-    if (data.thumbnail) {
+    if (data.thumbnail && isSafeHttpUrl(data.thumbnail)) {
       previewThumbnail.src = data.thumbnail;
       previewThumbnail.classList.remove("hidden");
       thumbnailFallback.classList.add("hidden");
