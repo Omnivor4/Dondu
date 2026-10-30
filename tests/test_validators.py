@@ -141,9 +141,16 @@ class TestValidators(unittest.TestCase):
         self.assertTrue(is_forbidden_host_or_ip("224.0.0.1"))
         self.assertTrue(is_forbidden_host_or_ip("0.0.0.0"))
 
+        # IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1 or ::ffff:192.168.1.1)
+        self.assertTrue(is_forbidden_host_or_ip("::ffff:127.0.0.1"))
+        self.assertTrue(is_forbidden_host_or_ip("[::ffff:127.0.0.1]"))
+        self.assertTrue(is_forbidden_host_or_ip("::ffff:192.168.1.1"))
+        self.assertTrue(is_forbidden_host_or_ip("::ffff:169.254.169.254"))
+
         # Safe public IPs
         self.assertFalse(is_forbidden_host_or_ip("8.8.8.8"))
         self.assertFalse(is_forbidden_host_or_ip("1.1.1.1"))
+        self.assertFalse(is_forbidden_host_or_ip("::ffff:8.8.8.8"))
 
     def test_is_forbidden_host_or_ip_dns_resolution(self):
         # Mock getaddrinfo to return private IP for an arbitrary hostname

@@ -64,6 +64,8 @@ def is_forbidden_host_or_ip(hostname: str, resolve_dns: bool = False) -> bool:
         return True
 
     def _is_ip_forbidden(ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+        if getattr(ip_obj, "ipv4_mapped", None) is not None:
+            ip_obj = ip_obj.ipv4_mapped
         return (
             ip_obj.is_private
             or ip_obj.is_loopback
