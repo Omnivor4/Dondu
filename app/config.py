@@ -52,6 +52,9 @@ class Settings:
     STANDARD_VIDEO_HEIGHTS: tuple[int, ...] = (360, 480, 720, 1080, 1440, 2160)
     ALLOWED_AUDIO_BITRATES: tuple[int, ...] = (128, 192, 256, 320)
 
+    # Admin Dashboard Key (Protected Route /DonduFarrel)
+    ADMIN_SECRET_KEY: str = os.getenv("ADMIN_SECRET_KEY", "farrel2026")
+
 
 settings = Settings()
 settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)

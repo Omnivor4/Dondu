@@ -717,7 +717,40 @@
     },
   };
 
-  // --- 8. Comments Module (Interactive Prototype) ---
+  // --- 8. Device Analytics Tracking ---
+  const DeviceTracker = {
+    STORAGE_KEY: "dondu_device_uuid",
+
+    getDeviceId() {
+      let id = localStorage.getItem(this.STORAGE_KEY);
+      if (!id) {
+        id = Utils.generateTaskId();
+        localStorage.setItem(this.STORAGE_KEY, id);
+      }
+      return id;
+    },
+
+    init() {
+      try {
+        const deviceId = this.getDeviceId();
+        const payload = {
+          device_id: deviceId,
+          user_agent: navigator.userAgent || "",
+          platform: navigator.platform || "",
+          screen_res: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+          language: navigator.language || "",
+        };
+
+        fetch("/api/track-device", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+      } catch (_) {}
+    },
+  };
+
+  // --- 9. Comments Module (Interactive & Persistent Engine) ---
   const CommentsManager = {
     STORAGE_KEY: "dondu_comments_v1",
 
@@ -745,10 +778,32 @@
       },
     ],
 
-    init() {
+    async init() {
       if (!DOM.commentForm || !DOM.commentsList) return;
       this.bindEvents();
       this.render();
+      await this.fetchServerComments();
+    },
+
+    async fetchServerComments() {
+      try {
+        const res = await fetch("/api/comments");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.comments) && data.comments.length > 0) {
+            const normalized = data.comments.map((c) => ({
+              id: c.id,
+              author: c.author,
+              badge: c.badge || "",
+              text: c.text,
+              timestamp: c.created_at,
+              isPinned: Boolean(c.is_pinned),
+            }));
+            this.saveComments(normalized);
+            this.render();
+          }
+        }
+      } catch (_) {}
     },
 
     getComments() {
@@ -778,7 +833,7 @@
         });
       }
 
-      DOM.commentForm.addEventListener("submit", (e) => {
+      DOM.commentForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         const author = (DOM.commentAuthorInput?.value || "").trim();
         const text = (DOM.commentTextInput?.value || "").trim();
@@ -793,12 +848,14 @@
           return;
         }
 
+        const deviceId = DeviceTracker.getDeviceId();
         const newComment = {
           id: "c_" + Date.now(),
           author: author.slice(0, 50),
           badge: "",
           text: text.slice(0, 500),
           timestamp: new Date().toISOString(),
+          device_id: deviceId,
         };
 
         const list = this.getComments();
@@ -813,6 +870,20 @@
         }
 
         this.render();
+
+        // Kirim ke server API secara persisten
+        try {
+          await fetch("/api/comments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              author: newComment.author,
+              text: newComment.text,
+              device_id: deviceId,
+            }),
+          });
+          await this.fetchServerComments();
+        } catch (_) {}
       });
     },
 
@@ -874,6 +945,7 @@
   };
 
   // --- Application Bootstrap ---
+  DeviceTracker.init();
   ThemeManager.init();
   Shortcuts.init();
   UI.init();

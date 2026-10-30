@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Comments collection
+    match /comments/{commentId} {
+      // Anyone can read active comments
+      allow read: if resource.data.status == 'active' || request.auth != null;
+      // Anyone can create a comment if fields are validated
+      allow create: if request.resource.data.author is string
+                    && request.resource.data.author.size() > 0
+                    && request.resource.data.author.size() <= 50
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() > 0
+                    && request.resource.data.text.size() <= 500;
+      // Only admin / authenticated users can update or delete
+      allow update, delete: if request.auth != null;
+    }
+
+    // Analytics devices collection
+    match /devices/{deviceId} {
+      allow read: if request.auth != null;
+      allow write: if true;
+    }
+  }
+}

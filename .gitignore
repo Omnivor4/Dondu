@@ -10,8 +10,14 @@ temp_downloads/
 .DS_Store
 Thumbs.db
 .superpowers/
-.pytest_cache/
-*.apk
-*.aab
-android/
-ios/
+# Databases & local persistent storage
+data/
+*.db
+*.sqlite3
+
+# Secrets & Firebase credentials
+*-firebase-adminsdk-*.json
+firebase-credentials.json
+service-account*.json
+*.key
+*.pem

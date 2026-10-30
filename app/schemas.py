@@ -44,3 +44,30 @@ class ProgressResponse(BaseModel):
     status: str
     percent: float
     message: str
+
+
+class DeviceTrackRequest(BaseModel):
+    device_id: Optional[str] = Field(default=None, max_length=128)
+    user_agent: Optional[str] = Field(default="", max_length=512)
+    platform: Optional[str] = Field(default="", max_length=128)
+    screen_res: Optional[str] = Field(default="", max_length=64)
+    language: Optional[str] = Field(default="", max_length=32)
+
+
+class CommentCreateRequest(BaseModel):
+    author: str = Field(..., min_length=1, max_length=50)
+    text: str = Field(..., min_length=1, max_length=500)
+    device_id: Optional[str] = Field(default="", max_length=128)
+
+
+class CommentUpdateRequest(BaseModel):
+    author: Optional[str] = Field(default=None, max_length=50)
+    text: Optional[str] = Field(default=None, max_length=500)
+    badge: Optional[str] = Field(default=None, max_length=30)
+    status: Optional[str] = Field(default=None, max_length=20)
+    is_pinned: Optional[bool] = None
+
+
+class AdminLoginRequest(BaseModel):
+    passkey: str = Field(..., min_length=1, max_length=128)
+

@@ -139,22 +139,22 @@ body {
 
 /* Page Shell & Architecture */
 .page-shell {
-  max-width: 760px;
+  max-width: 780px;
   margin: 0 auto;
-  padding: 24px 16px 36px;
+  padding: 30px 20px 52px;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 28px;
 }
 
 /* Header & Top Bar */
 .site-header {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 18px;
+  padding-bottom: 20px;
 }
 
 .header-top {
@@ -173,16 +173,23 @@ body {
 }
 
 .brand-mark {
-  width: 32px;
-  height: 32px;
-  background-color: var(--accent);
+  width: 36px;
+  height: 36px;
+  background-color: var(--bg-subtle);
   color: var(--accent-contrast);
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  padding: 4px;
+}
+
+.brand-logo-svg {
+  width: 28px;
+  height: 28px;
+  display: block;
 }
 
 .brand-text {
@@ -323,7 +330,7 @@ body {
 .main-content {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 32px;
   flex: 1;
 }
 
@@ -332,7 +339,7 @@ body {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 18px;
+  padding: 24px;
   box-shadow: var(--shadow-card);
 }
 
@@ -340,11 +347,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .input-label {
-  font-size: 0.84rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -359,7 +366,7 @@ body {
   background-color: var(--bg-subtle);
   border: 1px solid var(--border-color);
   border-radius: 3px;
-  padding: 1px 4px;
+  padding: 2px 5px;
   font-size: 0.72rem;
   color: var(--text-secondary);
 }
@@ -367,7 +374,7 @@ body {
 .input-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .input-wrapper {
@@ -379,9 +386,9 @@ body {
 
 .url-input {
   width: 100%;
-  height: 44px;
-  padding: 0 94px 0 12px;
-  font-size: 0.92rem;
+  height: 50px;
+  padding: 0 100px 0 16px;
+  font-size: 0.94rem;
   font-family: var(--font-sans);
   color: var(--text-primary);
   background-color: var(--bg-input);
@@ -392,33 +399,33 @@ body {
 }
 
 .url-input.has-value {
-  padding-right: 40px;
+  padding-right: 44px;
 }
 
 .url-input::placeholder {
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: 0.9rem;
 }
 
 .url-input:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 2px var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .paste-action-btn {
   position: absolute;
-  right: 6px;
-  height: 32px;
-  padding: 0 9px;
+  right: 8px;
+  height: 34px;
+  padding: 0 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background-color: var(--bg-subtle);
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
 }
@@ -451,9 +458,9 @@ body {
 
 /* Action Buttons */
 .btn {
-  height: 44px;
-  padding: 0 18px;
-  font-size: 0.9rem;
+  height: 48px;
+  padding: 0 20px;
+  font-size: 0.92rem;
   font-weight: 600;
   font-family: var(--font-sans);
   border-radius: var(--radius-md);
@@ -1056,12 +1063,16 @@ body {
 /* Responsive Grid Adjustments */
 @media (min-width: 580px) {
   .page-shell {
-    padding: 32px 20px 48px;
-    gap: 22px;
+    padding: 36px 24px 56px;
+    gap: 34px;
+  }
+
+  .main-content {
+    gap: 36px;
   }
 
   .card {
-    padding: 22px;
+    padding: 30px 28px;
   }
 
   .input-group {
@@ -1070,6 +1081,8 @@ body {
 
   .btn-inspect {
     width: auto;
+    height: 50px;
+    padding: 0 24px;
   }
 
   .inspector-grid {

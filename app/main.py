@@ -22,8 +22,21 @@ from app.downloader import (
     progress_tracker,
     remove_temp_dir,
 )
+from app.db import (
+    add_comment,
+    delete_comment,
+    get_all_comments_admin,
+    get_analytics_summary,
+    get_public_comments,
+    record_device_visit,
+    update_comment,
+)
 from app.rate_limiter import SlidingWindowRateLimiter
 from app.schemas import (
+    AdminLoginRequest,
+    CommentCreateRequest,
+    CommentUpdateRequest,
+    DeviceTrackRequest,
     DownloadRequest,
     ProgressResponse,
     VideoInfoRequest,
@@ -259,7 +272,133 @@ STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+def verify_admin_key(request: Request) -> bool:
+    key = request.headers.get("X-Admin-Key") or request.query_params.get("key")
+    if not key or key != settings.ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Kunci otorisasi admin tidak valid.")
+    return True
+
+
 @app.get("/", include_in_schema=False)
 async def serve_index() -> FileResponse:
     return FileResponse(str(STATIC_DIR / "index.html"))
+
+
+@app.get("/DonduFarrel", include_in_schema=False)
+async def serve_admin_page() -> FileResponse:
+    """Dashboard Admin khusus dengan URL tersembunyi /DonduFarrel."""
+    admin_html = STATIC_DIR / "admin.html"
+    if not admin_html.is_file():
+        raise HTTPException(status_code=404, detail="Halaman admin belum dibuat.")
+    return FileResponse(str(admin_html))
+
+
+# --- Analytics & Device Tracking ---
+
+@app.post("/api/track-device", tags=["Analytics"])
+async def track_device_endpoint(payload: DeviceTrackRequest, request: Request):
+    """Merekam jejak perangkat unik untuk analitik dashboard admin."""
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = payload.user_agent or request.headers.get("user-agent", "")
+    info = await asyncio.to_thread(
+        record_device_visit,
+        device_id=payload.device_id or "",
+        user_agent=user_agent,
+        platform=payload.platform or "",
+        screen_res=payload.screen_res or "",
+        language=payload.language or "",
+        client_ip=client_ip,
+    )
+    return {"status": "ok", "device": info}
+
+
+# --- Public Comments API ---
+
+@app.get("/api/comments", tags=["Comments"])
+async def list_comments():
+    """Mengambil daftar komentar publik terverifikasi."""
+    comments = await asyncio.to_thread(get_public_comments)
+    return {"comments": comments, "total": len(comments)}
+
+
+@app.post("/api/comments", tags=["Comments"])
+async def create_comment_endpoint(payload: CommentCreateRequest, request: Request):
+    """Menambahkan komentar baru dari pengguna dengan validasi dan rate limiting."""
+    rate_limiter.check(request)
+    created = await asyncio.to_thread(
+        add_comment,
+        author=payload.author,
+        text=payload.text,
+        device_id=payload.device_id or "",
+    )
+    return {"status": "ok", "comment": created}
+
+
+# --- Admin Dashboard Endpoints (Protected) ---
+
+@app.post("/api/admin/login", tags=["Admin"])
+async def admin_login_endpoint(payload: AdminLoginRequest):
+    """Verifikasi passkey untuk masuk ke dashboard admin."""
+    if payload.passkey != settings.ADMIN_SECRET_KEY:
+        raise HTTPException(status_code=401, detail="Passkey admin salah.")
+    return {"status": "ok", "token": settings.ADMIN_SECRET_KEY}
+
+
+@app.get("/api/admin/analytics", tags=["Admin"])
+async def admin_analytics_endpoint(request: Request):
+    """Ringkasan statistik perangkat dan pengunjung web."""
+    verify_admin_key(request)
+    summary = await asyncio.to_thread(get_analytics_summary)
+    return summary
+
+
+@app.get("/api/admin/comments", tags=["Admin"])
+async def admin_list_comments_endpoint(request: Request):
+    """Mengambil semua komentar (termasuk yang disembunyikan) untuk manajemen CRUD."""
+    verify_admin_key(request)
+    comments = await asyncio.to_thread(get_all_comments_admin)
+    return {"comments": comments, "total": len(comments)}
+
+
+@app.post("/api/admin/comments", tags=["Admin"])
+async def admin_create_announcement(payload: CommentCreateRequest, request: Request):
+    """Admin membuat komentar atau pengumuman resmi bertanda Developer/Admin."""
+    verify_admin_key(request)
+    created = await asyncio.to_thread(
+        add_comment,
+        author=payload.author,
+        text=payload.text,
+        badge="Developer",
+        is_pinned=True,
+    )
+    return {"status": "ok", "comment": created}
+
+
+@app.put("/api/admin/comments/{comment_id}", tags=["Admin"])
+async def admin_update_comment_endpoint(comment_id: str, payload: CommentUpdateRequest, request: Request):
+    """Admin memperbarui status, teks, badge, atau pin komentar."""
+    verify_admin_key(request)
+    updated = await asyncio.to_thread(
+        update_comment,
+        comment_id=comment_id,
+        author=payload.author,
+        text=payload.text,
+        badge=payload.badge,
+        status=payload.status,
+        is_pinned=payload.is_pinned,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Komentar tidak ditemukan.")
+    return {"status": "ok", "comment": updated}
+
+
+@app.delete("/api/admin/comments/{comment_id}", tags=["Admin"])
+async def admin_delete_comment_endpoint(comment_id: str, request: Request):
+    """Admin menghapus komentar spam atau tidak pantas."""
+    verify_admin_key(request)
+    deleted = await asyncio.to_thread(delete_comment, comment_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Komentar tidak ditemukan.")
+    return {"status": "ok", "deleted_id": comment_id}
+
 
