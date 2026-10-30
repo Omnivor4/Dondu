@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Forte — Unduh video & MP3 dengan cepat dari TikTok, Instagram, Facebook, X, dan YouTube." />
+  <meta name="theme-color" content="#10b981" />
+  <title>Forte — Unduh video &amp; MP3 dengan cepat.</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <!-- Header & Branding -->
+    <header class="site-header">
+      <div class="header-top">
+        <a href="/" class="brand-logo" aria-label="Forte Beranda">
+          <span class="brand-icon" aria-hidden="true">
+            <!-- Inline SVG: Gelombang audio berpadu dengan panah unduh -->
+            <svg viewBox="0 0 36 36" width="34" height="34" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="36" height="36" rx="10" fill="currentColor" fill-opacity="0.14" />
+              <path d="M9 15V21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+              <path d="M13.5 11.5V24.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+              <path d="M22.5 11.5V24.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+              <path d="M27 15V21" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+              <path d="M18 8.5V23.5M18 23.5L14.2 19.7M18 23.5L21.8 19.7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M12.5 27.5H23.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span class="brand-wordmark">Forte</span>
+        </a>
+
+        <button type="button" id="themeToggleBtn" class="theme-toggle" aria-label="Ganti mode tampilan terang atau gelap" title="Ganti tema tampilan">
+          <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+          <span id="themeToggleLabel" class="sr-only">Tema</span>
+        </button>
+      </div>
+
+      <p class="brand-tagline">Unduh video &amp; MP3 dengan cepat.</p>
+
+      <!-- Chip teks sederhana platform yang didukung -->
+      <div class="platform-chips" aria-label="Platform yang didukung">
+        <span class="chip">TikTok</span>
+        <span class="chip">Instagram</span>
+        <span class="chip">Facebook</span>
+        <span class="chip">X</span>
+        <span class="chip">YouTube</span>
+      </div>
+    </header>
+
+    <!-- Konten Utama -->
+    <main class="main-content">
+      <!-- Form Input Link -->
+      <section class="card search-card" aria-labelledby="formHeading">
+        <h1 id="formHeading" class="sr-only">Formulir Pemeriksaan Tautan Video</h1>
+        <form id="checkForm" novalidate>
+          <label for="urlInput" class="input-label">Tautan Video</label>
+          <div class="input-group">
+            <div class="input-wrapper">
+              <input
+                type="url"
+                id="urlInput"
+                name="url"
+                class="url-input"
+                placeholder="Tempel tautan TikTok, Instagram, Facebook, X, atau YouTube..."
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                required
+              />
+              <button
+                type="button"
+                id="pasteInputBtn"
+                class="paste-action-btn"
+                aria-label="Tempel tautan dari clipboard"
+                title="Tempel dari clipboard"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="2" width="6" height="4" rx="1"></rect>
+                  <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"></path>
+                </svg>
+                <span>Tempel</span>
+              </button>
+              <button
+                type="button"
+                id="clearInputBtn"
+                class="icon-action-btn hidden"
+                aria-label="Bersihkan tautan"
+                title="Hapus tautan"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+
+            <button type="submit" id="checkBtn" class="btn btn-primary">
+              <span id="checkBtnSpinner" class="spinner hidden" aria-hidden="true"></span>
+              <span id="checkBtnText">Cek Video</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- Kotak Notifikasi Error / Peringatan -->
+        <div id="alertBox" class="alert-box hidden" role="alert" aria-live="polite">
+          <svg class="alert-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <p id="alertMessage" class="alert-text"></p>
+        </div>
+      </section>
+
+      <!-- Preview Card & Pengaturan Unduhan -->
+      <section id="previewSection" class="card preview-card hidden" aria-live="polite">
+        <div class="media-preview">
+          <div class="thumbnail-box">
+            <img id="previewThumbnail" class="thumbnail-img hidden" alt="Thumbnail pratinjau video" referrerpolicy="no-referrer" />
+            <div id="thumbnailFallback" class="thumbnail-fallback" aria-hidden="true">
+              <svg viewBox="0 0 48 48" width="42" height="42" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="10" width="36" height="28" rx="4"></rect>
+                <polygon points="20 18 31 24 20 30 20 18"></polygon>
+              </svg>
+            </div>
+            <span id="previewDuration" class="badge-duration">00:00</span>
+          </div>
+
+          <div class="media-details">
+            <div class="media-badges">
+              <span id="previewPlatform" class="badge-platform">YouTube</span>
+            </div>
+            <h2 id="previewTitle" class="media-title">Judul Video</h2>
+            <p id="previewUploader" class="media-uploader">Nama Uploader</p>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Pilihan Format (Toggle) & Dropdown Kualitas -->
+        <div class="controls-grid">
+          <div class="control-block">
+            <span class="control-label" id="formatToggleLabel">Pilih Format</span>
+            <div class="format-toggle" role="tablist" aria-labelledby="formatToggleLabel">
+              <button
+                type="button"
+                id="toggleVideoBtn"
+                class="toggle-option active"
+                role="tab"
+                aria-selected="true"
+                data-format="video"
+              >
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2" y="4" width="20" height="16" rx="3"></rect>
+                  <polygon points="10 9 15 12 10 15 10 9"></polygon>
+                </svg>
+                <span>Video (MP4)</span>
+              </button>
+              <button
+                type="button"
+                id="toggleAudioBtn"
+                class="toggle-option"
+                role="tab"
+                aria-selected="false"
+                data-format="audio"
+              >
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+                <span>Audio (MP3)</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control-block">
+            <label for="qualitySelect" id="qualitySelectLabel" class="control-label">Kualitas Video</label>
+            <div class="select-wrapper">
+              <select id="qualitySelect" class="quality-select"></select>
+              <svg class="select-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Area Progres Unduhan -->
+        <div id="progressContainer" class="progress-container hidden" aria-live="polite">
+          <div class="progress-header">
+            <span id="progressStatusText" class="progress-status">Menyiapkan unduhan...</span>
+            <span id="progressPercentText" class="progress-percent">0%</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBarTrack">
+            <div id="progressBarFill" class="progress-fill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Tombol Download -->
+        <button type="button" id="downloadBtn" class="btn btn-primary btn-download">
+          <svg id="downloadBtnIcon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span id="downloadBtnSpinner" class="spinner hidden" aria-hidden="true"></span>
+          <span id="downloadBtnText">Download</span>
+        </button>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <p class="footer-copyright">Forte &copy; <span id="currentYear">2026</span></p>
+      <p class="footer-disclaimer">
+        Gunakan hanya untuk konten milik sendiri, berlisensi terbuka, atau yang diizinkan pembuatnya. Konten ber-DRM dan akun privat tidak didukung.
+      </p>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
