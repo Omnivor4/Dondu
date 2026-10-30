@@ -128,7 +128,9 @@
   // --- 4. Utilities ---
   const Utils = {
     isSafeHttpUrl(url) {
-      return typeof url === "string" && /^https?:\/\/[^\s"'<>]+$/i.test(url.trim());
+      if (typeof url !== "string") return false;
+      const trimmed = url.trim();
+      return /^https?:\/\/[^\s"'<>]+\.[^\s"'<>]+$/i.test(trimmed);
     },
 
     extractUrlFromText(rawText) {
@@ -213,6 +215,26 @@
       }
       this.syncInputState();
       this.bindEvents();
+
+      // Cek apakah link sudah ada (query param ?url= atau link yang sudah terisi di input)
+      let initialUrl = "";
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryUrl = urlParams.get("url") || urlParams.get("link");
+        if (queryUrl) {
+          initialUrl = Utils.extractUrlFromText(queryUrl);
+        }
+      } catch (_) {}
+
+      if (!initialUrl && DOM.urlInput && DOM.urlInput.value) {
+        initialUrl = Utils.extractUrlFromText(DOM.urlInput.value);
+      }
+
+      if (initialUrl && Utils.isSafeHttpUrl(initialUrl)) {
+        DOM.urlInput.value = initialUrl;
+        this.syncInputState();
+        this.performCheck(initialUrl);
+      }
     },
 
     showAlert(message) {
@@ -348,40 +370,114 @@
       DOM.previewSection.classList.remove("hidden");
     },
 
+    async performCheck(customUrl) {
+      if (State.isDownloading) return;
+
+      const rawUrl = (typeof customUrl === "string" ? customUrl : DOM.urlInput.value).trim();
+      if (!rawUrl) {
+        this.showAlert("Silakan masukkan tautan media terlebih dahulu.");
+        DOM.urlInput.focus();
+        return;
+      }
+
+      if (DOM.urlInput.value !== rawUrl) {
+        DOM.urlInput.value = rawUrl;
+        this.syncInputState();
+      }
+
+      // Hindari duplikasi jika URL persis sama sudah sukses diinspeksi
+      if (
+        State.mediaInfo &&
+        (State.mediaInfo.webpage_url || "").trim() === rawUrl &&
+        !DOM.previewSection.classList.contains("hidden")
+      ) {
+        return;
+      }
+
+      this.hideAlert();
+      DOM.previewSection.classList.add("hidden");
+      this.setCheckLoading(true);
+
+      try {
+        const data = await ApiClient.fetchMediaInfo(rawUrl);
+        this.populatePreview(data);
+      } catch (err) {
+        this.showAlert(err.message || "Gagal menghubungkan ke server engine.");
+      } finally {
+        this.setCheckLoading(false);
+      }
+    },
+
     bindEvents() {
-      // Input typing & paste events
+      // Input typing & debounced auto-search saat link lengkap terdeteksi
+      let inputDebounceTimer = null;
       DOM.urlInput.addEventListener("input", () => {
         this.syncInputState();
         const currentVal = DOM.urlInput.value.trim();
+
         if (State.mediaInfo && currentVal !== (State.mediaInfo.webpage_url || "").trim()) {
           DOM.previewSection.classList.add("hidden");
           DOM.progressContainer.classList.add("hidden");
           State.reset();
         }
-      });
 
-      DOM.urlInput.addEventListener("paste", (event) => {
-        const text = (event.clipboardData || window.clipboardData)?.getData("text");
-        if (text && /https?:\/\//i.test(text)) {
-          event.preventDefault();
-          const extracted = Utils.extractUrlFromText(text);
-          DOM.urlInput.value = extracted;
-          if (State.mediaInfo && extracted !== (State.mediaInfo.webpage_url || "").trim()) {
-            DOM.previewSection.classList.add("hidden");
-            DOM.progressContainer.classList.add("hidden");
-            State.reset();
-          }
-          this.syncInputState();
-          this.hideAlert();
+        if (inputDebounceTimer) {
+          clearTimeout(inputDebounceTimer);
+          inputDebounceTimer = null;
+        }
+
+        // Jika link lengkap dan valid sudah ada/diketik, otomatis langsung mencari
+        if (Utils.isSafeHttpUrl(currentVal)) {
+          inputDebounceTimer = setTimeout(() => {
+            if (DOM.urlInput.value.trim() === currentVal && !State.isDownloading) {
+              this.performCheck(currentVal);
+            }
+          }, 350);
         }
       });
 
+      // Event paste langsung pada input URL: otomatis langsung mencari
+      DOM.urlInput.addEventListener("paste", (event) => {
+        const text = (event.clipboardData || window.clipboardData)?.getData("text");
+        if (text) {
+          const extracted = Utils.extractUrlFromText(text);
+          if (extracted && Utils.isSafeHttpUrl(extracted)) {
+            event.preventDefault();
+            DOM.urlInput.value = extracted;
+            if (State.mediaInfo && extracted !== (State.mediaInfo.webpage_url || "").trim()) {
+              DOM.previewSection.classList.add("hidden");
+              DOM.progressContainer.classList.add("hidden");
+              State.reset();
+            }
+            this.syncInputState();
+            this.hideAlert();
+            this.performCheck(extracted);
+          }
+        }
+      });
+
+      // Drag and drop link ke kolom input: otomatis langsung mencari
+      DOM.urlInput.addEventListener("drop", (event) => {
+        const text = event.dataTransfer?.getData("text");
+        if (text) {
+          const extracted = Utils.extractUrlFromText(text);
+          if (extracted && Utils.isSafeHttpUrl(extracted)) {
+            event.preventDefault();
+            DOM.urlInput.value = extracted;
+            this.syncInputState();
+            this.hideAlert();
+            this.performCheck(extracted);
+          }
+        }
+      });
+
+      // Tombol Tempel (Paste Button): ambil dari clipboard & langsung mencari
       if (DOM.pasteInputBtn) {
         DOM.pasteInputBtn.addEventListener("click", async () => {
           this.hideAlert();
           if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
             DOM.urlInput.focus();
-            this.showAlert("Akses clipboard browser tidak tersedia. Silakan tekan tahan kolom input lalu pilih Tempel.");
+            this.showAlert("Akses clipboard browser tidak tersedia. Silakan gunakan shortcut Ctrl+V atau klik kanan Tempel.");
             return;
           }
           try {
@@ -399,7 +495,11 @@
               State.reset();
             }
             this.syncInputState();
-            DOM.urlInput.focus();
+            if (Utils.isSafeHttpUrl(extracted)) {
+              this.performCheck(extracted);
+            } else {
+              DOM.urlInput.focus();
+            }
           } catch (_) {
             DOM.urlInput.focus();
             this.showAlert("Izin akses clipboard ditolak. Silakan tempel secara manual.");
@@ -408,6 +508,10 @@
       }
 
       DOM.clearInputBtn.addEventListener("click", () => {
+        if (inputDebounceTimer) {
+          clearTimeout(inputDebounceTimer);
+          inputDebounceTimer = null;
+        }
         DOM.urlInput.value = "";
         this.hideAlert();
         DOM.previewSection.classList.add("hidden");
@@ -428,30 +532,10 @@
         }
       });
 
-      // Form submission
-      DOM.checkForm.addEventListener("submit", async (e) => {
+      // Form submission (Enter key / manual click)
+      DOM.checkForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        if (State.isDownloading) return;
-
-        const rawUrl = DOM.urlInput.value.trim();
-        if (!rawUrl) {
-          this.showAlert("Silakan masukkan tautan media terlebih dahulu.");
-          DOM.urlInput.focus();
-          return;
-        }
-
-        this.hideAlert();
-        DOM.previewSection.classList.add("hidden");
-        this.setCheckLoading(true);
-
-        try {
-          const data = await ApiClient.fetchMediaInfo(rawUrl);
-          this.populatePreview(data);
-        } catch (err) {
-          this.showAlert(err.message || "Gagal menghubungkan ke server engine.");
-        } finally {
-          this.setCheckLoading(false);
-        }
+        this.performCheck();
       });
 
       // Download trigger
@@ -557,8 +641,17 @@
           return;
         }
 
-        // Global Ctrl+V / Cmd+V auto-focus and clipboard read
+        // Global Ctrl+V / Cmd+V auto-focus, clipboard read, & auto search
         if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
+          // Jika fokus sedang di textarea atau input lain (seperti komentar), biarkan perilaku bawaan
+          if (
+            document.activeElement &&
+            (document.activeElement.tagName === "TEXTAREA" ||
+              (document.activeElement.tagName === "INPUT" && document.activeElement !== DOM.urlInput))
+          ) {
+            return;
+          }
+
           if (document.activeElement !== DOM.urlInput) {
             DOM.urlInput.focus();
             if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
@@ -573,9 +666,12 @@
                   }
                   UI.syncInputState();
                   UI.hideAlert();
+                  if (Utils.isSafeHttpUrl(extracted)) {
+                    UI.performCheck(extracted);
+                  }
                 }
               }).catch(() => {
-                // Clipboard permissions might require user interaction; input is focused for native paste
+                // Izin clipboard mungkin memerlukan interaksi pengguna; fokus sudah di urlInput
               });
             }
           }
