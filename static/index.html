@@ -253,6 +253,58 @@
           <span id="downloadBtnText">Mulai Unduh &amp; Transcoding</span>
         </button>
       </section>
+
+      <!-- Section Komentar (Live Prototype) -->
+      <section class="card comments-card" id="commentsSection">
+        <div class="comments-header">
+          <div class="comments-title-wrap">
+            <svg class="comments-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <h2 class="comments-title">Komentar &amp; Ulasan</h2>
+            <span class="comments-count" id="commentsCountBadge">0</span>
+          </div>
+          <span class="comments-tag">Draft Kasaran</span>
+        </div>
+
+        <!-- Form Tambah Komentar -->
+        <form id="commentForm" class="comment-form" novalidate>
+          <div class="comment-form-group">
+            <input
+              type="text"
+              id="commentAuthorInput"
+              class="comment-input"
+              placeholder="Nama Anda (cth. Farrel)..."
+              maxlength="50"
+              autocomplete="name"
+              required
+            />
+          </div>
+          <div class="comment-form-group">
+            <textarea
+              id="commentTextInput"
+              class="comment-textarea"
+              rows="3"
+              placeholder="Tulis komentar atau feedback pengalaman unduhan Anda di sini..."
+              maxlength="500"
+              required
+            ></textarea>
+          </div>
+          <div class="comment-form-footer">
+            <span class="comment-char-counter" id="commentCharCounter">0 / 500</span>
+            <button type="submit" id="commentSubmitBtn" class="btn btn-primary btn-comment">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+              <span>Kirim Komentar</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- Daftar Komentar Interaktif -->
+        <div class="comments-list" id="commentsList" aria-live="polite"></div>
+      </section>
     </main>
 
     <!-- Footer -->

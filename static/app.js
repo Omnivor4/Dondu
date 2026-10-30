@@ -73,6 +73,16 @@
     // Theme & Meta
     themeToggleBtn: document.getElementById("themeToggleBtn"),
     currentYear: document.getElementById("currentYear"),
+
+    // Comments Section (Interactive Prototype)
+    commentsSection: document.getElementById("commentsSection"),
+    commentsCountBadge: document.getElementById("commentsCountBadge"),
+    commentForm: document.getElementById("commentForm"),
+    commentAuthorInput: document.getElementById("commentAuthorInput"),
+    commentTextInput: document.getElementById("commentTextInput"),
+    commentCharCounter: document.getElementById("commentCharCounter"),
+    commentSubmitBtn: document.getElementById("commentSubmitBtn"),
+    commentsList: document.getElementById("commentsList"),
   };
 
   // --- 3. API Client Layer ---
@@ -164,6 +174,34 @@
         return asciiMatch[1];
       }
       return `Dondu_Media.${fallbackExt}`;
+    },
+
+    escapeHtml(str) {
+      if (typeof str !== "string") return "";
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    },
+
+    formatTimeAgo(isoString) {
+      try {
+        const date = new Date(isoString);
+        const now = new Date();
+        const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+        if (diffSec < 60) return "Baru saja";
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) return `${diffMin} menit yang lalu`;
+        const diffHours = Math.floor(diffMin / 60);
+        if (diffHours < 24) return `${diffHours} jam yang lalu`;
+        const diffDays = Math.floor(diffHours / 24);
+        if (diffDays < 7) return `${diffDays} hari yang lalu`;
+        return date.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+      } catch (_) {
+        return "Baru saja";
+      }
     },
   };
 
@@ -583,8 +621,165 @@
     },
   };
 
+  // --- 8. Comments Module (Interactive Prototype) ---
+  const CommentsManager = {
+    STORAGE_KEY: "dondu_comments_v1",
+
+    defaultComments: [
+      {
+        id: "c_1",
+        author: "FarreL",
+        badge: "Developer",
+        text: "Sistem pipeline Dondu v2.0 stabil. Kecepatan transcode H.264 & audio MP3 berjalan normal tanpa kompresi berlebih. Silakan tinggalkan kritik atau saran di sini!",
+        timestamp: new Date(Date.now() - 3600 * 1000 * 2).toISOString(),
+      },
+      {
+        id: "c_2",
+        author: "Alex Pratama",
+        badge: "User",
+        text: "UI-nya bersih banget tanpa gradasi dan warna terracotta-nya enak di mata. Unduh video TikTok jernih langsung masuk tanpa watermark.",
+        timestamp: new Date(Date.now() - 3600 * 1000 * 5).toISOString(),
+      },
+      {
+        id: "c_3",
+        author: "Rian Saputra",
+        badge: "",
+        text: "Fitur keyboard shortcut Ctrl+V sangat membantu buat paste cepat. Mantap!",
+        timestamp: new Date(Date.now() - 3600 * 1000 * 24).toISOString(),
+      },
+    ],
+
+    init() {
+      if (!DOM.commentForm || !DOM.commentsList) return;
+      this.bindEvents();
+      this.render();
+    },
+
+    getComments() {
+      try {
+        const raw = localStorage.getItem(this.STORAGE_KEY);
+        if (!raw) {
+          this.saveComments(this.defaultComments);
+          return [...this.defaultComments];
+        }
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (_) {}
+      return [...this.defaultComments];
+    },
+
+    saveComments(comments) {
+      try {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(comments));
+      } catch (_) {}
+    },
+
+    bindEvents() {
+      if (DOM.commentTextInput && DOM.commentCharCounter) {
+        DOM.commentTextInput.addEventListener("input", () => {
+          const len = DOM.commentTextInput.value.length;
+          DOM.commentCharCounter.textContent = `${len} / 500`;
+        });
+      }
+
+      DOM.commentForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const author = (DOM.commentAuthorInput?.value || "").trim();
+        const text = (DOM.commentTextInput?.value || "").trim();
+
+        if (!author) {
+          DOM.commentAuthorInput?.focus();
+          return;
+        }
+
+        if (!text) {
+          DOM.commentTextInput?.focus();
+          return;
+        }
+
+        const newComment = {
+          id: "c_" + Date.now(),
+          author: author.slice(0, 50),
+          badge: "",
+          text: text.slice(0, 500),
+          timestamp: new Date().toISOString(),
+        };
+
+        const list = this.getComments();
+        list.unshift(newComment);
+        this.saveComments(list);
+
+        if (DOM.commentTextInput) {
+          DOM.commentTextInput.value = "";
+        }
+        if (DOM.commentCharCounter) {
+          DOM.commentCharCounter.textContent = "0 / 500";
+        }
+
+        this.render();
+      });
+    },
+
+    getInitials(name) {
+      if (!name) return "U";
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+      }
+      return name.slice(0, 2).toUpperCase();
+    },
+
+    render() {
+      const list = this.getComments();
+      if (DOM.commentsCountBadge) {
+        DOM.commentsCountBadge.textContent = String(list.length);
+      }
+
+      if (!DOM.commentsList) return;
+
+      if (list.length === 0) {
+        DOM.commentsList.innerHTML = `
+          <div class="comments-empty">
+            Belum ada komentar. Jadilah yang pertama memberikan ulasan!
+          </div>
+        `;
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      list.forEach((c) => {
+        const item = document.createElement("div");
+        item.className = "comment-item";
+
+        const initials = Utils.escapeHtml(this.getInitials(c.author));
+        const authorSafe = Utils.escapeHtml(c.author);
+        const textSafe = Utils.escapeHtml(c.text);
+        const timeFormatted = Utils.formatTimeAgo(c.timestamp);
+        const badgeHtml = c.badge
+          ? `<span class="comment-badge-author">${Utils.escapeHtml(c.badge)}</span>`
+          : "";
+
+        item.innerHTML = `
+          <div class="comment-avatar" aria-hidden="true">${initials}</div>
+          <div class="comment-body">
+            <div class="comment-meta">
+              <span class="comment-author">${authorSafe}${badgeHtml}</span>
+              <time class="comment-time" datetime="${Utils.escapeHtml(c.timestamp || "")}">${timeFormatted}</time>
+            </div>
+            <p class="comment-text">${textSafe}</p>
+          </div>
+        `;
+        fragment.appendChild(item);
+      });
+
+      DOM.commentsList.innerHTML = "";
+      DOM.commentsList.appendChild(fragment);
+    },
+  };
+
   // --- Application Bootstrap ---
   ThemeManager.init();
   Shortcuts.init();
   UI.init();
+  CommentsManager.init();
 })();
