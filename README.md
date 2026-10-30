@@ -241,10 +241,10 @@ pip install -U yt-dlp
 
 ### Pada Docker
 ```bash
-# Memperbarui langsung di dalam container yang sedang berjalan
-docker exec -it forte-app pip install -U yt-dlp && docker restart forte-app
+# Memperbarui langsung di dalam container yang sedang berjalan (sebagai root karena container berjalan dengan user non-root forte)
+docker exec -u 0 -it forte-app pip install -U yt-dlp && docker restart forte-app
 
-# Atau bangun ulang image tanpa cache
+# Atau bangun ulang image tanpa cache (direkomendasikan)
 docker build --no-cache -t forte .
 ```
 
