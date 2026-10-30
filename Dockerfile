@@ -1,14 +1,14 @@
 FROM python:3.11-slim
 
-LABEL maintainer="Forte"
-LABEL description="Forte - Aplikasi Web Downloader Video & MP3"
+LABEL maintainer="Dondu"
+LABEL description="Dondu - Aplikasi Web Downloader Video & MP3"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HOST=0.0.0.0 \
     PORT=8000 \
-    TEMP_DIR=/tmp/forte_downloads
+    TEMP_DIR=/tmp/dondu_downloads
 
 WORKDIR /app
 
@@ -17,9 +17,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ffmpeg ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Buat grup dan pengguna non-root khusus forte (UID/GID 10001)
-RUN groupadd -g 10001 forte && \
-    useradd -u 10001 -g forte -s /bin/sh -M forte
+# Buat grup dan pengguna non-root khusus dondu (UID/GID 10001)
+RUN groupadd -g 10001 dondu && \
+    useradd -u 10001 -g dondu -s /bin/sh -M dondu
 
 # Instal dependensi Python dan pastikan yt-dlp selalu versi terbaru saat build
 COPY requirements.txt .
@@ -31,12 +31,12 @@ RUN pip install --upgrade pip && \
 COPY app/ ./app/
 COPY static/ ./static/
 
-# Buat direktori sementara dengan izin ketat dan atur kepemilikan untuk pengguna forte
-RUN mkdir -p /tmp/forte_downloads && \
-    chown -R forte:forte /app /tmp/forte_downloads && \
-    chmod 700 /tmp/forte_downloads
+# Buat direktori sementara dengan izin ketat dan atur kepemilikan untuk pengguna dondu
+RUN mkdir -p /tmp/dondu_downloads && \
+    chown -R dondu:dondu /app /tmp/dondu_downloads && \
+    chmod 700 /tmp/dondu_downloads
 
-USER forte
+USER dondu
 
 EXPOSE 8000
 

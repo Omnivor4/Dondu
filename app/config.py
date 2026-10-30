@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings:
-    APP_NAME: str = "Forte"
+    APP_NAME: str = "Dondu"
     APP_TAGLINE: str = "Unduh video & MP3 dengan cepat."
     VERSION: str = "1.0.0"
 
@@ -36,7 +36,7 @@ class Settings:
 
     # Direktori unduhan sementara dan jadwal pembersihan
     # Di lingkungan serverless seperti Vercel/AWS Lambda, hanya /tmp yang dapat ditulis (writable)
-    _default_temp = "/tmp/forte_downloads" if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") else str(BASE_DIR / "temp_downloads")
+    _default_temp = "/tmp/dondu_downloads" if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") else str(BASE_DIR / "temp_downloads")
     TEMP_DIR: Path = Path(os.getenv("TEMP_DIR", _default_temp)).resolve()
     CLEANUP_MAX_AGE_MINUTES: int = int(os.getenv("CLEANUP_MAX_AGE_MINUTES", "15"))
     CLEANUP_MAX_AGE_SECONDS: int = CLEANUP_MAX_AGE_MINUTES * 60

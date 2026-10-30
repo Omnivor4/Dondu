@@ -42,7 +42,7 @@ class TestApiHardening(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data.get("status"), "ok")
-        self.assertEqual(data.get("app"), "Forte")
+        self.assertEqual(data.get("app"), "Dondu")
         self.assertIn("version", data)
         self.assertIn("ffmpeg_installed", data)
         self.assertIn("limits", data)

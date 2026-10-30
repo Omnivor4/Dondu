@@ -1,15 +1,15 @@
-# Laporan Audit Keamanan & Arsitektur Aplikasi Forte
+﻿# Laporan Audit Keamanan & Arsitektur Aplikasi Dondu
 
 **Versi Dokumen**: 1.0  
 **Tanggal Audit**: 30 Oktober 2026  
 **Status Audit**: Selesai & Terverifikasi (41/41 Automated Unit Tests Lolos)  
-**Target Aplikasi**: Forte (FastAPI + yt-dlp + FFmpeg Video/Audio Downloader)
+**Target Aplikasi**: Dondu (FastAPI + yt-dlp + FFmpeg Video/Audio Downloader)
 
 ---
 
 ## 1. Ringkasan Eksekutif (Executive Summary)
 
-Audit keamanan menyeluruh dan penguatan arsitektur (*hardening*) telah dilakukan terhadap aplikasi **Forte**. Forte dirancang sebagai layanan web mandiri (*self-hosted*) untuk mengunduh video dan audio dari platform publik terkemuka (TikTok, Instagram, Facebook, X/Twitter, dan YouTube). Mengingat sifat alami aplikasi pengunduh media yang berinteraksi langsung dengan URL eksternal, mengeksekusi subproses *transcoding*, dan mengelola file sementara di disk, aplikasi ini memiliki bidang serangan (*attack surface*) yang signifikan apabila tidak diproteksi secara ketat.
+Audit keamanan menyeluruh dan penguatan arsitektur (*hardening*) telah dilakukan terhadap aplikasi **Dondu**. Dondu dirancang sebagai layanan web mandiri (*self-hosted*) untuk mengunduh video dan audio dari platform publik terkemuka (TikTok, Instagram, Facebook, X/Twitter, dan YouTube). Mengingat sifat alami aplikasi pengunduh media yang berinteraksi langsung dengan URL eksternal, mengeksekusi subproses *transcoding*, dan mengelola file sementara di disk, aplikasi ini memiliki bidang serangan (*attack surface*) yang signifikan apabila tidak diproteksi secara ketat.
 
 Audit ini berfokus pada identifikasi, mitigasi, dan verifikasi terhadap lima kategori risiko utama:
 1. **Penyalahgunaan Permintaan Server (Server-Side Request Forgery - SSRF) & Open Redirect**: Potensi eksfiltrasi metadata cloud dan pemindaian jaringan internal organisasi.
@@ -20,7 +20,7 @@ Audit ini berfokus pada identifikasi, mitigasi, dan verifikasi terhadap lima kat
 
 Seluruh kerentanan yang teridentifikasi telah diremediasi secara tuntas pada kode sumber, konfigurasi Docker, dan middleware aplikasi. Selain itu, kebijakan batas durasi dan ukuran file kini diatur menjadi **tanpa batas (`0 = unlimited`) secara default**, dengan perlindungan stabilitas sistem yang dialihkan ke mekanisme pembatasan konkurensi berbasis semafor (*concurrency semaphore*), rate limiter berbasis memori terbatas, dan isolasi memori sementara (*tmpfs*).
 
-Sebanyak **41 pengujian unit dan integrasi otomatis** telah diimplementasikan dan diverifikasi lulus 100%, memastikan bahwa aplikasi Forte siap untuk di-*deploy* ke lingkungan produksi dengan tingkat ketahanan yang tinggi.
+Sebanyak **41 pengujian unit dan integrasi otomatis** telah diimplementasikan dan diverifikasi lulus 100%, memastikan bahwa aplikasi Dondu siap untuk di-*deploy* ke lingkungan produksi dengan tingkat ketahanan yang tinggi.
 
 ---
 
@@ -29,17 +29,17 @@ Sebanyak **41 pengujian unit dan integrasi otomatis** telah diimplementasikan da
 Berikut adalah rincian teknis dari kerentanan keamanan yang ditemukan pada kode awal beserta solusi perbaikan yang telah diimplementasikan:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          RINGKASAN STATUS KERENTANAN                            │
-├───────┬──────────┬─────────────────────────────────────────────────┬────────────┤
-│ ID    │ Severity │ Nama Kerentanan                                 │ Status     │
-├───────┼──────────┼─────────────────────────────────────────────────┼────────────┤
-│ SEC-1 │ CRITICAL │ SSRF & Open Redirect via Shortlink & Validasi   │ REMEDIATED │
-│ SEC-2 │ HIGH     │ Rate Limiter Bypass & Memory Exhaustion Header  │ REMEDIATED │
-│ SEC-3 │ HIGH     │ Resource Exhaustion via FFmpeg/yt-dlp           │ REMEDIATED │
-│ SEC-4 │ HIGH     │ Container Berjalan sebagai Root & chmod 777     │ REMEDIATED │
-│ SEC-5 │ MEDIUM   │ Thumbnail Scheme Injection & Header Keamanan    │ REMEDIATED │
-└───────┴──────────┴─────────────────────────────────────────────────┴────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚                          RINGKASAN STATUS KERENTANAN                            â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚ ID    â”‚ Severity â”‚ Nama Kerentanan                                 â”‚ Status     â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚ SEC-1 â”‚ CRITICAL â”‚ SSRF & Open Redirect via Shortlink & Validasi   â”‚ REMEDIATED â”‚
+â”‚ SEC-2 â”‚ HIGH     â”‚ Rate Limiter Bypass & Memory Exhaustion Header  â”‚ REMEDIATED â”‚
+â”‚ SEC-3 â”‚ HIGH     â”‚ Resource Exhaustion via FFmpeg/yt-dlp           â”‚ REMEDIATED â”‚
+â”‚ SEC-4 â”‚ HIGH     â”‚ Container Berjalan sebagai Root & chmod 777     â”‚ REMEDIATED â”‚
+â”‚ SEC-5 â”‚ MEDIUM   â”‚ Thumbnail Scheme Injection & Header Keamanan    â”‚ REMEDIATED â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ---
@@ -129,23 +129,23 @@ Aplikasi mengizinkan domain pemendek tautan resmi seperti `t.co`, `vm.tiktok.com
 
 #### Deskripsi Celah & Vektor Serangan Awal
 1. `Dockerfile` bawaan tidak mendefinisikan direktif `USER`, sehingga seluruh proses (FastAPI, Uvicorn, Python, FFmpeg) berjalan dengan hak istimewa pengguna `root` di dalam container.
-2. Direktori sementara `/tmp/forte_downloads` atau `temp_downloads` dibuat dengan izin penuh `chmod 777`.
+2. Direktori sementara `/tmp/dondu_downloads` atau `temp_downloads` dibuat dengan izin penuh `chmod 777`.
 
 #### Dampak Risiko di Produksi
 - **Container Escape & Privilege Escalation**: Jika ditemukan kerentanan *Remote Code Execution* (RCE) pada parser media `FFmpeg` (misalnya celah *buffer overflow* pada library demuxer C/C++) atau library `yt-dlp`, penyerang langsung mengeksekusi kode sebagai `root`. Hal ini membuka peluang pelarian dari container (*container breakout*) ke host OS apabila terdapat konfigurasi kernel/volume yang longgar.
 
 #### Remediasi yang Diterapkan
 1. **Dedicated Non-Root User & Group (`Dockerfile`)**:
-   - Dibuat user dan grup khusus non-root bernama `forte` dengan UID dan GID statis `10001`:
+   - Dibuat user dan grup khusus non-root bernama `dondu` dengan UID dan GID statis `10001`:
      ```dockerfile
-     RUN groupadd -g 10001 forte && \
-         useradd -u 10001 -g forte -s /bin/bash -m forte
+     RUN groupadd -g 10001 dondu && \
+         useradd -u 10001 -g dondu -s /bin/bash -m dondu
      ```
 2. **Izin Direktori Minimum (Principle of Least Privilege)**:
-   - Direktori kerja `/app` dan direktori unduhan `/tmp/forte_downloads` diubah kepemilikannya ke `forte:forte`.
-   - Izin direktori unduhan diatur ketat ke `chmod 700 /tmp/forte_downloads`, sehingga hanya dapat dibaca dan ditulis oleh user `forte`.
+   - Direktori kerja `/app` dan direktori unduhan `/tmp/dondu_downloads` diubah kepemilikannya ke `dondu:dondu`.
+   - Izin direktori unduhan diatur ketat ke `chmod 700 /tmp/dondu_downloads`, sehingga hanya dapat dibaca dan ditulis oleh user `dondu`.
 3. **Eksekusi Kontainer Aman**:
-   - Mengaktifkan direktif `USER forte` sebelum instruksi `CMD`.
+   - Mengaktifkan direktif `USER dondu` sebelum instruksi `CMD`.
    - Menambahkan opsi `--no-access-log` dan `--timeout-keep-alive 30` pada uvicorn di `CMD` untuk mengurangi beban penulisan log berlebih di container.
 
 ---
@@ -183,12 +183,12 @@ Aplikasi mengizinkan domain pemendek tautan resmi seperti `t.co`, `vm.tiktok.com
 
 ## 3. Analisis Desain: Default Durasi & Ukuran File Tanpa Batas (`0 = Unlimited`)
 
-Pada versi sebelumnya, Forte menerapkan batas durasi 60 menit dan batas ukuran file 500 MB. Dalam audit ini, konfigurasi default diubah menjadi:
+Pada versi sebelumnya, Dondu menerapkan batas durasi 60 menit dan batas ukuran file 500 MB. Dalam audit ini, konfigurasi default diubah menjadi:
 - `MAX_DURATION_MINUTES=0` (0 = Tanpa batas durasi)
 - `MAX_FILE_SIZE_MB=0` (0 = Tanpa batas ukuran file)
 
-### Mengapa Desain Ini Aman Diterapkan di Forte?
-Membuka batasan durasi dan ukuran file sering kali menimbulkan kekhawatiran terhadap penipisan sumber daya (*resource exhaustion*). Namun, pada arsitektur Forte yang baru, keamanan dan stabilitas sistem tidak lagi bertumpu pada pemotongan durasi file, melainkan dijamin melalui **lapisan pertahanan berlapis (defense-in-depth)**:
+### Mengapa Desain Ini Aman Diterapkan di Dondu?
+Membuka batasan durasi dan ukuran file sering kali menimbulkan kekhawatiran terhadap penipisan sumber daya (*resource exhaustion*). Namun, pada arsitektur Dondu yang baru, keamanan dan stabilitas sistem tidak lagi bertumpu pada pemotongan durasi file, melainkan dijamin melalui **lapisan pertahanan berlapis (defense-in-depth)**:
 
 1. **Pembatasan Konkurensi Keras (*Hard Concurrency Limit*)**:
    - Dengan `MAX_CONCURRENT_DOWNLOADS=3`, server secara absolut tidak akan pernah memproses lebih dari 3 pekerjaan pengunduhan/transcoding secara simultan, terlepas dari seberapa besar file yang diunduh.
@@ -202,28 +202,28 @@ Membuka batasan durasi dan ukuran file sering kali menimbulkan kekhawatiran terh
    - Dengan menjalankan direktori unduhan di atas `tmpfs` (RAM terisolasi) berukuran tertentu (misal 2 GB), kapasitas disk fisik host tidak akan pernah terpengaruh.
 
 > [!NOTE]
-> Jika administrator menjalankan Forte pada VPS dengan spesifikasi CPU/RAM yang sangat terbatas (misal RAM 512 MB atau 1 core), batas durasi dan ukuran file tetap dapat diaktifkan kapan saja dengan mengisi angka `> 0` pada environment variable `MAX_DURATION_MINUTES` dan `MAX_FILE_SIZE_MB`.
+> Jika administrator menjalankan Dondu pada VPS dengan spesifikasi CPU/RAM yang sangat terbatas (misal RAM 512 MB atau 1 core), batas durasi dan ukuran file tetap dapat diaktifkan kapan saja dengan mengisi angka `> 0` pada environment variable `MAX_DURATION_MINUTES` dan `MAX_FILE_SIZE_MB`.
 
 ---
 
 ## 4. Rekomendasi Arsitektur & Kesiapan Produksi
 
-Untuk memastikan Forte beroperasi dengan performa tinggi dan keamanan maksimal di lingkungan publik, terapkan rekomendasi berikut:
+Untuk memastikan Dondu beroperasi dengan performa tinggi dan keamanan maksimal di lingkungan publik, terapkan rekomendasi berikut:
 
 ### 4.1 Reverse Proxy & Terminasi TLS/HTTPS
 **Status: WAJIB UNTUK PRODUKSI**
 
 1. **Kebutuhan Akses Clipboard di Perangkat Mobile**:
-   - Antarmuka Forte menyediakan tombol "Tempel" yang memanfaatkan API browser `navigator.clipboard.readText()`.
+   - Antarmuka Dondu menyediakan tombol "Tempel" yang memanfaatkan API browser `navigator.clipboard.readText()`.
    - Sesuai spesifikasi W3C dan kebijakan keamanan browser modern (iOS Safari, Android Chrome, desktop Chrome), **Clipboard API hanya dapat diakses dalam Secure Context (HTTPS)**.
-   - Jika Forte diakses melalui HTTP biasa (misal `http://ip-server:8000`), fitur tempel otomatis akan dinonaktifkan oleh browser demi keamanan privasi pengguna.
+   - Jika Dondu diakses melalui HTTP biasa (misal `http://ip-server:8000`), fitur tempel otomatis akan dinonaktifkan oleh browser demi keamanan privasi pengguna.
 2. **Konfigurasi Reverse Proxy**:
-   - Jalankan Forte di balik Caddy atau Nginx.
-   - Aktifkan `TRUST_PROXY_HEADERS=true` pada Forte hanya jika reverse proxy telah dikonfigurasi untuk menimpa (*overwrite*) header `X-Forwarded-For`.
+   - Jalankan Dondu di balik Caddy atau Nginx.
+   - Aktifkan `TRUST_PROXY_HEADERS=true` pada Dondu hanya jika reverse proxy telah dikonfigurasi untuk menimpa (*overwrite*) header `X-Forwarded-For`.
 
 #### Contoh Konfigurasi Caddy (`Caddyfile`):
 ```caddy
-forte.domainanda.com {
+dondu.domainanda.com {
     encode zstd gzip
 
     # Batasi ukuran request body jika diperlukan
@@ -240,20 +240,20 @@ forte.domainanda.com {
 }
 ```
 
-#### Contoh Konfigurasi Nginx (`/etc/nginx/sites-available/forte`):
+#### Contoh Konfigurasi Nginx (`/etc/nginx/sites-available/dondu`):
 ```nginx
 server {
     listen 80;
-    server_name forte.domainanda.com;
+    server_name dondu.domainanda.com;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name forte.domainanda.com;
+    server_name dondu.domainanda.com;
 
-    ssl_certificate /etc/letsencrypt/live/forte.domainanda.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/forte.domainanda.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/dondu.domainanda.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/dondu.domainanda.com/privkey.pem;
 
     client_max_body_size 10M;
 
@@ -281,12 +281,12 @@ server {
 Gunakan mount `tmpfs` pada direktori file sementara saat menjalankan container Docker:
 ```bash
 docker run -d \
-  --name forte-app \
+  --name dondu-app \
   -p 8000:8000 \
-  --tmpfs /tmp/forte_downloads:rw,noexec,nosuid,size=2g \
+  --tmpfs /tmp/dondu_downloads:rw,noexec,nosuid,size=2g \
   -e MAX_CONCURRENT_DOWNLOADS=3 \
   -e MAX_CONCURRENT_INFO=8 \
-  forte
+  dondu
 ```
 
 **Keuntungan**:
@@ -316,7 +316,7 @@ Platform seperti YouTube, Instagram, dan TikTok secara aktif memantau dan memblo
 1. **Otomasi Pembaruan `yt-dlp`**:
    - `yt-dlp` merilis perbaikan hampir setiap minggu untuk mengatasi perubahan algoritma platform. Pasang cronjob di server untuk memperbarui image Docker atau library secara berkala:
      ```bash
-     0 3 * * * docker exec forte-app pip install -U yt-dlp && docker restart forte-app
+     0 3 * * * docker exec dondu-app pip install -U yt-dlp && docker restart dondu-app
      ```
 2. **Penggunaan File Cookies (`COOKIES_FILE`)**:
    - Untuk platform Instagram dan Facebook yang sering mewajibkan sesi login, sediakan file cookies berformat Netscape (`cookies.txt`).
@@ -329,7 +329,7 @@ Platform seperti YouTube, Instagram, dan TikTok secara aktif memantau dan memblo
 
 ## 5. Checklist Sebelum Go-Live (Pre-Deployment Checklist)
 
-Gunakan tabel checklist berikut sebelum meluncurkan aplikasi Forte ke domain publik:
+Gunakan tabel checklist berikut sebelum meluncurkan aplikasi Dondu ke domain publik:
 
 | Kategori | Butir Pengecekan | Status Wajib | Verifikasi |
 | :--- | :--- | :--- | :--- |
@@ -338,7 +338,7 @@ Gunakan tabel checklist berikut sebelum meluncurkan aplikasi Forte ke domain pub
 | **Proxy Trust** | Variabel `TRUST_PROXY_HEADERS=true` hanya disetel jika reverse proxy menimpa header `X-Forwarded-For` | WAJIB | Periksa log IP di backend dan pastikan IP klien bukan loopback atau hasil injeksi. |
 | **API Docs Exposure** | Variabel `ENABLE_DOCS=false` di lingkungan produksi | WAJIB | Akses `https://domain.com/docs` dan pastikan menghasilkan halaman 404 Not Found. |
 | **Health Check** | Endpoint `/health` merespon `200 OK` tanpa kebocoran informasi versi pustaka | WAJIB | Jalankan `curl https://domain.com/health` -> `{"status":"ok"}`. |
-| **Container User** | Container Docker berjalan dengan user non-root `forte` (UID `10001`) | WAJIB | Jalankan `docker exec forte-app id` -> `uid=10001(forte)`. |
+| **Container User** | Container Docker berjalan dengan user non-root `dondu` (UID `10001`) | WAJIB | Jalankan `docker exec dondu-app id` -> `uid=10001(dondu)`. |
 | **Isolasi Temp Dir** | Direktori unduhan sementara dimount menggunakan `--tmpfs` atau bervolume terisolasi | DIREKOMENDASIKAN | Periksa `df -h` di dalam container. |
 | **Batas Konkurensi** | `MAX_CONCURRENT_DOWNLOADS` (3) dan `MAX_CONCURRENT_INFO` (8) disesuaikan dengan kapasitas CPU server | WAJIB | Lakukan uji beban ringan; server merespon 503 jika antrean penuh tanpa crash. |
 | **Unit Test Suite** | Seluruh 41 unit & integration test lolos pengujian otomatis | WAJIB | Jalankan `python -m unittest discover -s tests -v`. |
@@ -347,6 +347,6 @@ Gunakan tabel checklist berikut sebelum meluncurkan aplikasi Forte ke domain pub
 
 ## 6. Kesimpulan
 
-Melalui serangkaian perbaikan pada Task 1 hingga Task 4, aplikasi **Forte** telah bertransformasi dari prototipe fungsional menjadi sistem pengunduh media yang tangguh, aman, dan berstandar produksi. Seluruh celah kritis mulai dari SSRF, manipulasi rate limit, DoS proses, hingga isolasi hak akses container telah ditutup secara permanen.
+Melalui serangkaian perbaikan pada Task 1 hingga Task 4, aplikasi **Dondu** telah bertransformasi dari prototipe fungsional menjadi sistem pengunduh media yang tangguh, aman, dan berstandar produksi. Seluruh celah kritis mulai dari SSRF, manipulasi rate limit, DoS proses, hingga isolasi hak akses container telah ditutup secara permanen.
 
-Dengan menerapkan rekomendasi arsitektur di atas (khususnya penggunaan HTTPS untuk kompatibilitas Clipboard API mobile dan isolasi folder unduhan sementara), Forte siap beroperasi melayani pengguna dengan cepat, andal, dan aman.
+Dengan menerapkan rekomendasi arsitektur di atas (khususnya penggunaan HTTPS untuk kompatibilitas Clipboard API mobile dan isolasi folder unduhan sementara), Dondu siap beroperasi melayani pengguna dengan cepat, andal, dan aman.

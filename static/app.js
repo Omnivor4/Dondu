@@ -52,7 +52,7 @@
   }
 
   // Pengaturan tema (otomatis mengikuti sistem, dengan opsi ganti manual)
-  const savedTheme = localStorage.getItem("forte_theme");
+  const savedTheme = localStorage.getItem("dondu_theme");
   if (savedTheme === "dark" || savedTheme === "light") {
     document.documentElement.setAttribute("data-theme", savedTheme);
   }
@@ -64,7 +64,7 @@
     const isCurrentlyDark = currentAttr ? currentAttr === "dark" : systemDark;
     const nextTheme = isCurrentlyDark ? "light" : "dark";
     root.setAttribute("data-theme", nextTheme);
-    localStorage.setItem("forte_theme", nextTheme);
+    localStorage.setItem("dondu_theme", nextTheme);
   });
 
   // Tampilkan tombol Tempel saat kosong, atau tombol Hapus saat berisi teks
@@ -332,7 +332,7 @@
       return asciiMatch[1];
     }
 
-    return `Forte_Media.${fallbackExt}`;
+    return `Dondu_Media.${fallbackExt}`;
   }
 
   function generateTaskId() {

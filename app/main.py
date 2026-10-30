@@ -40,7 +40,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("forte.main")
+logger = logging.getLogger("dondu.main")
 
 rate_limiter = SlidingWindowRateLimiter(
     max_requests=settings.RATE_LIMIT_PER_MINUTE,
@@ -158,7 +158,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 @app.get("/health", tags=["System"])
 async def health_check() -> dict:
-    """Endpoint pemeriksaan kesehatan layanan Forte."""
+    """Endpoint pemeriksaan kesehatan layanan Dondu."""
     return {
         "status": "ok",
         "app": settings.APP_NAME,

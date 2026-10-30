@@ -1,8 +1,8 @@
-# Forte
+﻿# Dondu
 
 **Unduh video & MP3 dengan cepat.**
 
-**Forte** adalah aplikasi web pengunduh video (MP4) dan audio (MP3) berbasis **Python 3.11+**, **FastAPI**, **yt-dlp**, dan **FFmpeg**, dengan antarmuka **HTML + CSS + JavaScript Vanilla** yang ringan, responsif (mobile-first), dan mendukung mode terang/gelap otomatis.
+**Dondu** adalah aplikasi web pengunduh video (MP4) dan audio (MP3) berbasis **Python 3.11+**, **FastAPI**, **yt-dlp**, dan **FFmpeg**, dengan antarmuka **HTML + CSS + JavaScript Vanilla** yang ringan, responsif (mobile-first), dan mendukung mode terang/gelap otomatis.
 
 ---
 
@@ -17,7 +17,7 @@
   - **Proteksi SSRF & Open Redirect**: Memblokir IP internal/privat, loopback, link-local metadata cloud, kredensial tersemat, port non-standar, serta memvalidasi ulang URL target pasca-ekstraksi shortlink.
   - **Batas Konkurensi Keras (`asyncio.Semaphore`)**: Melindungi server dari kehabisan CPU/RAM akibat proses FFmpeg simultan; secara default durasi dan ukuran file diatur **tanpa batas (`0 = unlimited`)**.
   - **Pembatas Laju (*Rate Limiting*) Terisolasi**: Mencegah serangan flooding dan pembobolan header proxy (`X-Forwarded-For`), dilengkapi pembatasan memori otomatis (FIFO eviction).
-  - **Container Docker Non-Root**: Berjalan di bawah pengguna khusus `forte` (UID `10001`) dengan izin folder ketat (`chmod 700`).
+  - **Container Docker Non-Root**: Berjalan di bawah pengguna khusus `dondu` (UID `10001`) dengan izin folder ketat (`chmod 700`).
   - **Header Keamanan HTTP**: CSP ketat, X-Frame-Options (DENY), X-Content-Type-Options (nosniff), dan Swagger UI dinonaktifkan secara default di produksi.
   - **Bersih & Tanpa Riwayat**: Setiap unduhan diproses di folder sementara unik dan langsung dihapus setelah streaming selesai, ditambah pembersihan berkala otomatis setiap 2 menit untuk file kedaluwarsa.
 
@@ -26,37 +26,37 @@
 ## Struktur Proyek
 
 ```text
-forte/
-├── app/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── downloader.py
-│   ├── main.py
-│   ├── rate_limiter.py
-│   ├── schemas.py
-│   └── validators.py
-├── static/
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
-├── tests/
-│   ├── __init__.py
-│   ├── test_api_hardening.py
-│   ├── test_security_backend.py
-│   └── test_validators.py
-├── .dockerignore
-├── .env.example
-├── AUDIT_REPORT.md
-├── Dockerfile
-├── requirements.txt
-└── README.md
+dondu/
+â”œâ”€â”€ app/
+â”‚   â”œâ”€â”€ __init__.py
+â”‚   â”œâ”€â”€ config.py
+â”‚   â”œâ”€â”€ downloader.py
+â”‚   â”œâ”€â”€ main.py
+â”‚   â”œâ”€â”€ rate_limiter.py
+â”‚   â”œâ”€â”€ schemas.py
+â”‚   â””â”€â”€ validators.py
+â”œâ”€â”€ static/
+â”‚   â”œâ”€â”€ index.html
+â”‚   â”œâ”€â”€ styles.css
+â”‚   â””â”€â”€ app.js
+â”œâ”€â”€ tests/
+â”‚   â”œâ”€â”€ __init__.py
+â”‚   â”œâ”€â”€ test_api_hardening.py
+â”‚   â”œâ”€â”€ test_security_backend.py
+â”‚   â””â”€â”€ test_validators.py
+â”œâ”€â”€ .dockerignore
+â”œâ”€â”€ .env.example
+â”œâ”€â”€ AUDIT_REPORT.md
+â”œâ”€â”€ Dockerfile
+â”œâ”€â”€ requirements.txt
+â””â”€â”€ README.md
 ```
 
 ---
 
 ## 1. Instalasi FFmpeg (Wajib untuk Instalasi Lokal)
 
-Forte membutuhkan **FFmpeg** untuk menggabungkan aliran video + audio resolusi tinggi (MP4) dan mengonversi audio ke MP3 beserta metadata/thumbnail.
+Dondu membutuhkan **FFmpeg** untuk menggabungkan aliran video + audio resolusi tinggi (MP4) dan mengonversi audio ke MP3 beserta metadata/thumbnail.
 
 ### Windows
 Pilih salah satu cara berikut di PowerShell / Terminal:
@@ -95,9 +95,9 @@ brew install ffmpeg
 
 ## 2. Cara Menjalankan Secara Lokal
 
-1. Masuk ke direktori proyek `forte/`:
+1. Masuk ke direktori proyek `dondu/`:
    ```bash
-   cd forte
+   cd dondu
    ```
 
 2. Buat dan aktifkan *virtual environment* Python 3.11+:
@@ -135,29 +135,29 @@ brew install ffmpeg
 
 ## 3. Cara Menjalankan dengan Docker
 
-Dockerfile sudah dikonfigurasi menggunakan **Python 3.11**, **FFmpeg**, dan berjalan aman sebagai user non-root `forte` (UID `10001`).
+Dockerfile sudah dikonfigurasi menggunakan **Python 3.11**, **FFmpeg**, dan berjalan aman sebagai user non-root `dondu` (UID `10001`).
 
-1. Bangun (*build*) image Docker bernama `forte`:
+1. Bangun (*build*) image Docker bernama `dondu`:
    ```bash
-   docker build -t forte .
+   docker build -t dondu .
    ```
 
-2. Jalankan container `forte` (dengan flag keamanan produksi yang direkomendasikan):
+2. Jalankan container `dondu` (dengan flag keamanan produksi yang direkomendasikan):
    ```bash
    docker run -d \
-     --name forte-app \
+     --name dondu-app \
      -p 8000:8000 \
-     --tmpfs /tmp/forte_downloads:rw,noexec,nosuid,size=2g \
+     --tmpfs /tmp/dondu_downloads:rw,noexec,nosuid,size=2g \
      -e MAX_DURATION_MINUTES=0 \
      -e MAX_FILE_SIZE_MB=0 \
      -e MAX_CONCURRENT_DOWNLOADS=3 \
      -e MAX_CONCURRENT_INFO=8 \
      -e RATE_LIMIT_PER_MINUTE=10 \
-     forte
+     dondu
    ```
 
    > **Catatan Flag Keamanan Produksi:**
-   > - `--tmpfs /tmp/forte_downloads:rw,noexec,nosuid,size=2g`: Memetakan folder unduhan sementara ke memori RAM terisolasi. Hal ini mempercepat proses penulisan file, mencegah keausan disk host, mengeliminasi risiko disk penuh (*disk exhaustion*), serta mencegah eksekusi file biner (`noexec`).
+   > - `--tmpfs /tmp/dondu_downloads:rw,noexec,nosuid,size=2g`: Memetakan folder unduhan sementara ke memori RAM terisolasi. Hal ini mempercepat proses penulisan file, mencegah keausan disk host, mengeliminasi risiko disk penuh (*disk exhaustion*), serta mencegah eksekusi file biner (`noexec`).
 
 3. Akses aplikasi di `http://localhost:8000`.
 
@@ -180,7 +180,7 @@ Konfigurasi aplikasi dapat disesuaikan melalui file `.env` atau *environment var
 | `MAX_DURATION_MINUTES` | `0` | Batas maksimum durasi video dalam menit (`0` = tanpa batas / *unlimited*; isi angka `> 0` jika ingin membatasi). |
 | `MAX_FILE_SIZE_MB` | `0` | Batas maksimum ukuran file hasil unduhan dalam MB (`0` = tanpa batas / *unlimited*; isi angka `> 0` jika ingin membatasi). |
 | `RATE_LIMIT_PER_MINUTE` | `10` | Jumlah maksimum permintaan per menit per alamat IP pada endpoint info dan unduh. |
-| `TEMP_DIR` | `temp_downloads` | Lokasi direktori sementara untuk memproses file unduhan (pada Docker otomatis dialihkan ke `/tmp/forte_downloads`). |
+| `TEMP_DIR` | `temp_downloads` | Lokasi direktori sementara untuk memproses file unduhan (pada Docker otomatis dialihkan ke `/tmp/dondu_downloads`). |
 | `CLEANUP_MAX_AGE_MINUTES` | `15` | Batas umur maksimum file sementara sebelum dihapus otomatis oleh pembersih berkala. |
 | `CLEANUP_INTERVAL_SECONDS` | `120` | Interval waktu antar pengecekan pembersihan berkala (dalam detik). |
 | `COOKIES_FILE` | *(kosong)* | Path opsional ke file cookies berformat Netscape (`cookies.txt`) bila diperlukan untuk konten tertentu. |
@@ -189,7 +189,7 @@ Konfigurasi aplikasi dapat disesuaikan melalui file `.env` atau *environment var
 
 ## 5. Pengujian Keamanan & Unit Test
 
-Forte dilengkapi dengan suite pengujian otomatis komprehensif yang mencakup 41 pengujian unit dan integrasi untuk memverifikasi fungsionalitas, keamanan, dan ketahanan sistem.
+Dondu dilengkapi dengan suite pengujian otomatis komprehensif yang mencakup 41 pengujian unit dan integrasi untuk memverifikasi fungsionalitas, keamanan, dan ketahanan sistem.
 
 Untuk menjalankan seluruh rangkaian pengujian:
 ```bash
@@ -226,7 +226,7 @@ python -m unittest discover -s tests -v
 ## 6. Laporan Audit Keamanan
 
 Untuk membaca analisis mendalam mengenai seluruh kerentanan yang telah diperbaiki, arsitektur keamanan, rekomendasi reverse proxy & TLS (diperlukan agar Clipboard API berfungsi di ponsel), dan checklist pra-produksi, silakan baca dokumentasi lengkap di:
-👉 **[AUDIT_REPORT.md](AUDIT_REPORT.md)**
+ðŸ‘‰ **[AUDIT_REPORT.md](AUDIT_REPORT.md)**
 
 ---
 
@@ -241,18 +241,18 @@ pip install -U yt-dlp
 
 ### Pada Docker
 ```bash
-# Memperbarui langsung di dalam container yang sedang berjalan (sebagai root karena container berjalan dengan user non-root forte)
-docker exec -u 0 -it forte-app pip install -U yt-dlp && docker restart forte-app
+# Memperbarui langsung di dalam container yang sedang berjalan (sebagai root karena container berjalan dengan user non-root dondu)
+docker exec -u 0 -it dondu-app pip install -U yt-dlp && docker restart dondu-app
 
 # Atau bangun ulang image tanpa cache (direkomendasikan)
-docker build --no-cache -t forte .
+docker build --no-cache -t dondu .
 ```
 
 ---
 
 ## 8. Catatan Batasan & Ketentuan Penggunaan
 
-- **Kebutuhan Cookies pada Instagram & Facebook**: Meskipun Forte mendukung tautan Reels dan video publik, **Instagram** dan **Facebook** terkadang membatasi akses tanpa sesi (*guest access*) untuk video tertentu atau dari alamat IP server tertentu. Jika hal ini terjadi, Anda dapat menyediakan file cookies berformat Netscape melalui variabel environment `COOKIES_FILE` (gunakan akun sekunder/*burner*, bukan akun utama).
+- **Kebutuhan Cookies pada Instagram & Facebook**: Meskipun Dondu mendukung tautan Reels dan video publik, **Instagram** dan **Facebook** terkadang membatasi akses tanpa sesi (*guest access*) untuk video tertentu atau dari alamat IP server tertentu. Jika hal ini terjadi, Anda dapat menyediakan file cookies berformat Netscape melalui variabel environment `COOKIES_FILE` (gunakan akun sekunder/*burner*, bukan akun utama).
 - **Kebutuhan HTTPS untuk Clipboard API**: Di browser smartphone (Safari iOS / Chrome Android), fitur tombol "Tempel" mewajibkan konteks aman HTTPS agar dapat membaca isi papan klip secara otomatis.
 - **Perubahan Platform**: Layanan dapat sewaktu-waktu mengalami gangguan ekstraksi ketika platform tujuan mengubah struktur halaman/API mereka sampai pembaruan `yt-dlp` berikutnya dirilis (`pip install -U yt-dlp`).
-- **Hak Cipta & Privasi**: Gunakan Forte hanya untuk mengunduh konten milik sendiri, berlisensi terbuka (*Creative Commons* / domain publik), atau yang telah diizinkan oleh pembuatnya. Konten ber-DRM, siaran langsung aktif, dan akun privat tidak didukung.
+- **Hak Cipta & Privasi**: Gunakan Dondu hanya untuk mengunduh konten milik sendiri, berlisensi terbuka (*Creative Commons* / domain publik), atau yang telah diizinkan oleh pembuatnya. Konten ber-DRM, siaran langsung aktif, dan akun privat tidak didukung.

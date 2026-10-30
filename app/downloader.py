@@ -15,7 +15,7 @@ from app.config import settings
 from app.schemas import QualityOption, VideoInfoResponse
 from app.validators import URLValidationError, sanitize_filename, validate_and_identify_url
 
-logger = logging.getLogger("forte.downloader")
+logger = logging.getLogger("dondu.downloader")
 
 
 class DownloaderUserError(Exception):
@@ -457,7 +457,7 @@ def download_media(
     """
     if not is_ffmpeg_available():
         raise DownloaderUserError(
-            "FFmpeg tidak ditemukan di sistem. Silakan instal FFmpeg terlebih dahulu agar Forte dapat memproses video dan MP3.",
+            "FFmpeg tidak ditemukan di sistem. Silakan instal FFmpeg terlebih dahulu agar Dondu dapat memproses video dan MP3.",
             status_code=500,
         )
 
@@ -624,7 +624,7 @@ def download_media(
                 status_code=413,
             )
 
-        title = (info_dict.get("title") or info_dict.get("fulltitle") or f"Forte {platform}").strip()
+        title = (info_dict.get("title") or info_dict.get("fulltitle") or f"Dondu {platform}").strip()
         final_ext = expected_file.suffix.lstrip(".") or target_ext
         clean_filename = sanitize_filename(title, final_ext)
         media_type = "audio/mpeg" if final_ext == "mp3" else "video/mp4"

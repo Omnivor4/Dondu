@@ -236,8 +236,8 @@ class TestValidators(unittest.TestCase):
         self.assertEqual(sanitize_filename("Audio", ".mp3"), "Audio.mp3")
 
         # Empty title fallback
-        self.assertEqual(sanitize_filename("", "mp4"), "Forte_Media.mp4")
-        self.assertEqual(sanitize_filename("   ", "mp4"), "Forte_Media.mp4")
+        self.assertEqual(sanitize_filename("", "mp4"), "Dondu_Media.mp4")
+        self.assertEqual(sanitize_filename("   ", "mp4"), "Dondu_Media.mp4")
 
         # Very long title truncation (max 140 chars + .ext)
         long_title = "A" * 200

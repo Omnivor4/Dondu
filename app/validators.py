@@ -169,7 +169,7 @@ def validate_and_identify_url(raw_url: str) -> tuple[str, str]:
 
     supported_list = "TikTok, Instagram, Facebook, X (Twitter), dan YouTube"
     raise URLValidationError(
-        f"Domain '{hostname}' tidak didukung. Forte hanya mendukung tautan dari {supported_list}."
+        f"Domain '{hostname}' tidak didukung. Dondu hanya mendukung tautan dari {supported_list}."
     )
 
 
@@ -179,7 +179,7 @@ def sanitize_filename(title: str, extension: str) -> str:
     """
     ext = extension.lstrip(".").lower() or "mp4"
     if not title:
-        return f"Forte_Media.{ext}"
+        return f"Dondu_Media.{ext}"
 
     # Normalisasi karakter Unicode
     cleaned = unicodedata.normalize("NFKC", title)
@@ -193,7 +193,7 @@ def sanitize_filename(title: str, extension: str) -> str:
         cleaned = cleaned[:140].rstrip(" ._-")
 
     if not cleaned:
-        cleaned = "Forte_Media"
+        cleaned = "Dondu_Media"
 
     return f"{cleaned}.{ext}"
 
@@ -210,7 +210,7 @@ def build_content_disposition(filename: str) -> str:
     ascii_fallback = re.sub(r'["\\]', "", ascii_fallback).strip()
     if not ascii_fallback or ascii_fallback.startswith("."):
         ext = filename.rsplit(".", 1)[-1] if "." in filename else "mp4"
-        ascii_fallback = f"Forte_Media.{ext}"
+        ascii_fallback = f"Dondu_Media.{ext}"
 
     utf8_quoted = quote(filename, safe="")
     return f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{utf8_quoted}'
