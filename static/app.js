@@ -70,8 +70,7 @@
     downloadBtnSpinner: document.getElementById("downloadBtnSpinner"),
     downloadBtnText: document.getElementById("downloadBtnText"),
 
-    // Theme & Meta
-    themeToggleBtn: document.getElementById("themeToggleBtn"),
+    // Meta
     currentYear: document.getElementById("currentYear"),
 
     // Comments Section (Interactive Prototype)
@@ -695,25 +694,13 @@
     },
   };
 
-  // --- 7. Theme Controller ---
+  // --- 7. Theme Controller (Base Light Only) ---
   const ThemeManager = {
-    STORAGE_KEY: "dondu_theme",
-
     init() {
-      const saved = localStorage.getItem(this.STORAGE_KEY);
-      if (saved === "dark" || saved === "light") {
-        document.documentElement.setAttribute("data-theme", saved);
-      }
-
-      DOM.themeToggleBtn.addEventListener("click", () => {
-        const root = document.documentElement;
-        const current = root.getAttribute("data-theme");
-        const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const isDark = current ? current === "dark" : systemDark;
-        const next = isDark ? "light" : "dark";
-        root.setAttribute("data-theme", next);
-        localStorage.setItem(this.STORAGE_KEY, next);
-      });
+      try {
+        localStorage.removeItem("dondu_theme");
+      } catch (_) {}
+      document.documentElement.setAttribute("data-theme", "light");
     },
   };
 

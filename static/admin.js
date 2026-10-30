@@ -43,9 +43,6 @@
     btnModalClose: document.getElementById("btnModalClose"),
     btnModalCancel: document.getElementById("btnModalCancel"),
     btnAddAnnouncement: document.getElementById("btnAddAnnouncement"),
-
-    // Theme
-    themeToggleBtn: document.getElementById("themeToggleBtn"),
   };
 
   const AdminState = {
@@ -459,20 +456,11 @@
     },
 
     bindTheme() {
-      const saved = localStorage.getItem("dondu_theme");
-      if (saved === "dark" || saved === "light") {
-        document.documentElement.setAttribute("data-theme", saved);
-      }
-
-      DOM.themeToggleBtn?.addEventListener("click", () => {
-        const root = document.documentElement;
-        const current = root.getAttribute("data-theme");
-        const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        const isDark = current ? current === "dark" : systemDark;
-        const next = isDark ? "light" : "dark";
-        root.setAttribute("data-theme", next);
-        localStorage.setItem("dondu_theme", next);
-      });
+      // Base theme is strictly light; remove any previous dark theme state
+      try {
+        localStorage.removeItem("dondu_theme");
+      } catch (_) {}
+      document.documentElement.setAttribute("data-theme", "light");
     },
   };
 

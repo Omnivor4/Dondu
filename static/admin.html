@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -48,9 +48,7 @@
       letter-spacing: 0.04em;
     }
 
-    :root[data-theme="dark"] .admin-badge-lock {
-      color: var(--accent);
-    }
+
 
     .admin-nav-actions {
       display: flex;
@@ -81,9 +79,7 @@
       margin: 0 auto;
     }
 
-    :root[data-theme="dark"] .auth-icon-wrap {
-      color: var(--accent);
-    }
+
 
     /* Metrics Overview Grid */
     .metrics-grid {
@@ -205,9 +201,7 @@
       border: 1px solid var(--accent-border);
     }
 
-    :root[data-theme="dark"] .pill-active {
-      color: var(--accent);
-    }
+
 
     .pill-pinned {
       background-color: var(--accent);
@@ -308,9 +302,7 @@
       color: var(--accent-dark);
     }
 
-    :root[data-theme="dark"] .distribution-count {
-      color: var(--accent);
-    }
+
 
     /* Modal Form */
     .admin-modal-backdrop {
@@ -379,15 +371,6 @@
       <div class="admin-nav-actions">
         <span class="admin-badge-lock">RESTRICTED /DonduFarrel</span>
         <a href="/" class="btn btn-action" style="text-decoration:none;">Lihat Web Publik &rarr;</a>
-        <button type="button" id="themeToggleBtn" class="theme-toggle" aria-label="Ganti tema">
-          <svg class="icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="4"></circle>
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
-          </svg>
-          <svg class="icon-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-          </svg>
-        </button>
       </div>
     </header>
 
