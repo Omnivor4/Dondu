@@ -57,5 +57,8 @@ class Settings:
 
 
 settings = Settings()
-settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 

@@ -1,9 +1,16 @@
 import asyncio
 import contextlib
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
+
+# Pastikan root proyek masuk ke sys.path untuk lingkungan serverless seperti Vercel
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
 
 import yt_dlp
 from fastapi import FastAPI, HTTPException, Request
@@ -85,8 +92,15 @@ async def _periodic_cleanup_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    await asyncio.to_thread(cleanup_expired_temp_dirs)
+    try:
+        settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
+    try:
+        await asyncio.to_thread(cleanup_expired_temp_dirs)
+    except Exception:
+        pass
 
     ffmpeg_ok = is_ffmpeg_available()
     dur_str = f"{settings.MAX_DURATION_MINUTES}m" if settings.MAX_DURATION_MINUTES > 0 else "Tanpa Batas"
@@ -106,13 +120,19 @@ async def lifespan(app: FastAPI):
             "FFmpeg belum terdeteksi di PATH sistem! Penggabungan video MP4 dan konversi MP3 membutuhkan FFmpeg."
         )
 
-    cleanup_task = asyncio.create_task(_periodic_cleanup_loop())
+    # Hanya jalankan background cleanup task pada server persisten (bukan serverless Vercel)
+    is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    cleanup_task = None
+    if not is_serverless:
+        cleanup_task = asyncio.create_task(_periodic_cleanup_loop())
+
     try:
         yield
     finally:
-        cleanup_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await cleanup_task
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await cleanup_task
         logger.info("Server %s dihentikan.", settings.APP_NAME)
 
 
@@ -268,7 +288,20 @@ async def download_video_or_audio(payload: DownloadRequest, request: Request) ->
 
 
 STATIC_DIR: Path = BASE_DIR / "static"
-STATIC_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    STATIC_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
+
+def _resolve_static_path(filename: str) -> Path:
+    direct = STATIC_DIR / filename
+    if direct.is_file():
+        return direct
+    alt = Path("static") / filename
+    if alt.is_file():
+        return alt.resolve()
+    return direct
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
@@ -281,13 +314,16 @@ def verify_admin_key(request: Request) -> bool:
 
 @app.get("/", include_in_schema=False)
 async def serve_index() -> FileResponse:
-    return FileResponse(str(STATIC_DIR / "index.html"))
+    index_file = _resolve_static_path("index.html")
+    if not index_file.is_file():
+        raise HTTPException(status_code=404, detail="File index.html tidak ditemukan.")
+    return FileResponse(str(index_file))
 
 
 @app.get("/DonduFarrel", include_in_schema=False)
 async def serve_admin_page() -> FileResponse:
     """Dashboard Admin khusus dengan URL tersembunyi /DonduFarrel."""
-    admin_html = STATIC_DIR / "admin.html"
+    admin_html = _resolve_static_path("admin.html")
     if not admin_html.is_file():
         raise HTTPException(status_code=404, detail="Halaman admin belum dibuat.")
     return FileResponse(str(admin_html))
