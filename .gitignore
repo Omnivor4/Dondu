@@ -11,3 +11,7 @@ temp_downloads/
 Thumbs.db
 .superpowers/
 .pytest_cache/
+*.apk
+*.aab
+android/
+ios/

@@ -1,424 +1,590 @@
+/**
+ * Dondu — Enterprise Media Transcoding & Downloader Engine
+ * Modular Vanilla JavaScript Architecture
+ */
 (() => {
   "use strict";
 
-  // Elemen DOM
-  const checkForm = document.getElementById("checkForm");
-  const urlInput = document.getElementById("urlInput");
-  const pasteInputBtn = document.getElementById("pasteInputBtn");
-  const clearInputBtn = document.getElementById("clearInputBtn");
-  const checkBtn = document.getElementById("checkBtn");
-  const checkBtnSpinner = document.getElementById("checkBtnSpinner");
-  const checkBtnText = document.getElementById("checkBtnText");
+  // --- 1. State Management ---
+  const State = {
+    mediaInfo: null,
+    format: "video", // "video" | "audio"
+    isDownloading: false,
+    progressTimer: null,
+    activeTaskId: null,
 
-  const alertBox = document.getElementById("alertBox");
-  const alertMessage = document.getElementById("alertMessage");
-
-  const previewSection = document.getElementById("previewSection");
-  const previewThumbnail = document.getElementById("previewThumbnail");
-  const thumbnailFallback = document.getElementById("thumbnailFallback");
-  const previewDuration = document.getElementById("previewDuration");
-  const previewPlatform = document.getElementById("previewPlatform");
-  const previewTitle = document.getElementById("previewTitle");
-  const previewUploader = document.getElementById("previewUploader");
-
-  const toggleVideoBtn = document.getElementById("toggleVideoBtn");
-  const toggleAudioBtn = document.getElementById("toggleAudioBtn");
-  const qualitySelect = document.getElementById("qualitySelect");
-  const qualitySelectLabel = document.getElementById("qualitySelectLabel");
-
-  const progressContainer = document.getElementById("progressContainer");
-  const progressStatusText = document.getElementById("progressStatusText");
-  const progressPercentText = document.getElementById("progressPercentText");
-  const progressBarFill = document.getElementById("progressBarFill");
-  const progressBarTrack = document.getElementById("progressBarTrack");
-
-  const downloadBtn = document.getElementById("downloadBtn");
-  const downloadBtnIcon = document.getElementById("downloadBtnIcon");
-  const downloadBtnSpinner = document.getElementById("downloadBtnSpinner");
-  const downloadBtnText = document.getElementById("downloadBtnText");
-
-  const themeToggleBtn = document.getElementById("themeToggleBtn");
-  const currentYearEl = document.getElementById("currentYear");
-
-  // State aplikasi saat ini
-  let currentMediaInfo = null;
-  let selectedFormat = "video"; // "video" | "audio"
-  let isDownloading = false;
-  let progressInterval = null;
-
-  // Set tahun berjalan di footer
-  if (currentYearEl) {
-    currentYearEl.textContent = String(new Date().getFullYear());
-  }
-
-  // Pengaturan tema (otomatis mengikuti sistem, dengan opsi ganti manual)
-  const savedTheme = localStorage.getItem("dondu_theme");
-  if (savedTheme === "dark" || savedTheme === "light") {
-    document.documentElement.setAttribute("data-theme", savedTheme);
-  }
-
-  themeToggleBtn.addEventListener("click", () => {
-    const root = document.documentElement;
-    const currentAttr = root.getAttribute("data-theme");
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const isCurrentlyDark = currentAttr ? currentAttr === "dark" : systemDark;
-    const nextTheme = isCurrentlyDark ? "light" : "dark";
-    root.setAttribute("data-theme", nextTheme);
-    localStorage.setItem("dondu_theme", nextTheme);
-  });
-
-  // Tampilkan tombol Tempel saat kosong, atau tombol Hapus saat berisi teks
-  function syncInputActionButtons() {
-    const hasText = urlInput.value.trim().length > 0;
-    urlInput.classList.toggle("has-value", hasText);
-    clearInputBtn.classList.toggle("hidden", !hasText);
-    if (pasteInputBtn) {
-      pasteInputBtn.classList.toggle("hidden", hasText);
-    }
-  }
-
-  function extractUrlFromText(rawText) {
-    if (!rawText) return "";
-    const trimmed = rawText.trim();
-    const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
-    return urlMatch ? urlMatch[0] : trimmed;
-  }
-
-  urlInput.addEventListener("input", syncInputActionButtons);
-
-  // Ekstrak otomatis URL bersih jika pengguna menempel teks share dari aplikasi HP (mis. TikTok/IG yang ada caption-nya)
-  urlInput.addEventListener("paste", (event) => {
-    const pastedData = (event.clipboardData || window.clipboardData)?.getData("text");
-    if (pastedData && /https?:\/\//i.test(pastedData) && /\s/.test(pastedData.trim())) {
-      event.preventDefault();
-      urlInput.value = extractUrlFromText(pastedData);
-      syncInputActionButtons();
-      hideAlert();
-    }
-  });
-
-  if (pasteInputBtn) {
-    pasteInputBtn.addEventListener("click", async () => {
-      hideAlert();
-      if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
-        urlInput.focus();
-        showAlert("Browser Anda tidak mengizinkan akses clipboard otomatis. Silakan tekan tahan di kolom input lalu pilih Tempel.");
-        return;
+    reset() {
+      this.mediaInfo = null;
+      this.isDownloading = false;
+      this.activeTaskId = null;
+      if (this.progressTimer) {
+        clearInterval(this.progressTimer);
+        this.progressTimer = null;
       }
+    },
+  };
 
-      try {
-        const clipText = await navigator.clipboard.readText();
-        const extracted = extractUrlFromText(clipText);
-        if (!extracted) {
-          showAlert("Clipboard masih kosong. Salin tautan video terlebih dahulu.");
-          urlInput.focus();
-          return;
-        }
-        urlInput.value = extracted;
-        syncInputActionButtons();
-        urlInput.focus();
-      } catch (_) {
-        urlInput.focus();
-        showAlert("Izin baca clipboard ditolak oleh browser. Silakan tekan tahan pada kolom input lalu pilih Tempel.");
-      }
-    });
-  }
+  // --- 2. DOM Elements Cache ---
+  const DOM = {
+    // Form & Input
+    checkForm: document.getElementById("checkForm"),
+    urlInput: document.getElementById("urlInput"),
+    pasteInputBtn: document.getElementById("pasteInputBtn"),
+    clearInputBtn: document.getElementById("clearInputBtn"),
+    checkBtn: document.getElementById("checkBtn"),
+    checkBtnSpinner: document.getElementById("checkBtnSpinner"),
+    checkBtnText: document.getElementById("checkBtnText"),
+    shortcutHint: document.getElementById("shortcutHint"),
 
-  clearInputBtn.addEventListener("click", () => {
-    urlInput.value = "";
-    syncInputActionButtons();
-    hideAlert();
-    urlInput.focus();
-  });
+    // Alert
+    alertBox: document.getElementById("alertBox"),
+    alertMessage: document.getElementById("alertMessage"),
 
-  syncInputActionButtons();
+    // Preview & Inspector
+    previewSection: document.getElementById("previewSection"),
+    previewThumbnail: document.getElementById("previewThumbnail"),
+    thumbnailFallback: document.getElementById("thumbnailFallback"),
+    previewDuration: document.getElementById("previewDuration"),
+    previewPlatform: document.getElementById("previewPlatform"),
+    previewTitle: document.getElementById("previewTitle"),
+    previewUploader: document.getElementById("previewUploader"),
+    specCodec: document.getElementById("specCodec"),
+    specStatus: document.getElementById("specStatus"),
 
-  function showAlert(message) {
-    alertMessage.textContent = message;
-    alertBox.classList.remove("hidden");
-  }
+    // Controls
+    toggleVideoBtn: document.getElementById("toggleVideoBtn"),
+    toggleAudioBtn: document.getElementById("toggleAudioBtn"),
+    qualitySelect: document.getElementById("qualitySelect"),
+    qualitySelectLabel: document.getElementById("qualitySelectLabel"),
 
-  function hideAlert() {
-    alertMessage.textContent = "";
-    alertBox.classList.add("hidden");
-  }
+    // Progress
+    progressContainer: document.getElementById("progressContainer"),
+    progressStatusText: document.getElementById("progressStatusText"),
+    progressPercentText: document.getElementById("progressPercentText"),
+    progressBarFill: document.getElementById("progressBarFill"),
+    progressBarTrack: document.getElementById("progressBarTrack"),
 
-  function formatBytes(bytes) {
-    if (!bytes || bytes <= 0) return "";
-    const mb = bytes / (1024 * 1024);
-    if (mb >= 1) {
-      return ` (~${mb.toFixed(1)} MB)`;
-    }
-    const kb = bytes / 1024;
-    return ` (~${Math.round(kb)} KB)`;
-  }
+    // Download Button
+    downloadBtn: document.getElementById("downloadBtn"),
+    downloadBtnIcon: document.getElementById("downloadBtnIcon"),
+    downloadBtnSpinner: document.getElementById("downloadBtnSpinner"),
+    downloadBtnText: document.getElementById("downloadBtnText"),
 
-  function renderQualityOptions() {
-    if (!currentMediaInfo) return;
-    qualitySelect.innerHTML = "";
+    // Theme & Meta
+    themeToggleBtn: document.getElementById("themeToggleBtn"),
+    currentYear: document.getElementById("currentYear"),
+  };
 
-    if (selectedFormat === "video") {
-      qualitySelectLabel.textContent = "Kualitas Video (MP4)";
-      const qualities = currentMediaInfo.video_qualities || [
-        { value: "best", label: "Terbaik otomatis" },
-      ];
-      qualities.forEach((q) => {
-        const opt = document.createElement("option");
-        opt.value = q.value;
-        const sizeHint = q.filesize_approx ? formatBytes(q.filesize_approx) : "";
-        opt.textContent = `${q.label}${sizeHint}`;
-        qualitySelect.appendChild(opt);
-      });
-    } else {
-      qualitySelectLabel.textContent = "Bitrate Audio (MP3)";
-      const bitrateLabels = {
-        320: "320 kbps (Kualitas Terbaik)",
-        256: "256 kbps (Tinggi)",
-        192: "192 kbps (Standar)",
-        128: "128 kbps (Ukuran Kecil)",
-      };
-      const bitrates = currentMediaInfo.audio_bitrates || [128, 192, 256, 320];
-      [...bitrates]
-        .sort((a, b) => b - a)
-        .forEach((kbps) => {
-          const opt = document.createElement("option");
-          opt.value = String(kbps);
-          opt.textContent = bitrateLabels[kbps] || `${kbps} kbps`;
-          if (kbps === 192) {
-            opt.selected = true;
-          }
-          qualitySelect.appendChild(opt);
-        });
-    }
-  }
-
-  function setFormat(format) {
-    if (isDownloading) return;
-    selectedFormat = format;
-    const isVideo = format === "video";
-    toggleVideoBtn.classList.toggle("active", isVideo);
-    toggleVideoBtn.setAttribute("aria-selected", String(isVideo));
-    toggleAudioBtn.classList.toggle("active", !isVideo);
-    toggleAudioBtn.setAttribute("aria-selected", String(!isVideo));
-    renderQualityOptions();
-  }
-
-  toggleVideoBtn.addEventListener("click", () => setFormat("video"));
-  toggleAudioBtn.addEventListener("click", () => setFormat("audio"));
-
-  function setCheckLoading(loading) {
-    checkBtn.disabled = loading;
-    urlInput.readOnly = loading;
-    if (pasteInputBtn) pasteInputBtn.disabled = loading;
-    if (clearInputBtn) clearInputBtn.disabled = loading;
-    checkBtnSpinner.classList.toggle("hidden", !loading);
-    checkBtnText.textContent = loading ? "Memeriksa..." : "Cek Video";
-  }
-
-  function updateProgressUI(percent, message) {
-    const safePct = Math.max(0, Math.min(100, Math.round(percent)));
-    progressStatusText.textContent = message || "Memproses...";
-    progressPercentText.textContent = `${safePct}%`;
-    progressBarFill.style.width = `${safePct}%`;
-    progressBarTrack.setAttribute("aria-valuenow", String(safePct));
-  }
-
-  function setDownloadLoading(loading) {
-    isDownloading = loading;
-    downloadBtn.disabled = loading;
-    checkBtn.disabled = loading;
-    qualitySelect.disabled = loading;
-    toggleVideoBtn.disabled = loading;
-    toggleAudioBtn.disabled = loading;
-
-    downloadBtnIcon.classList.toggle("hidden", loading);
-    downloadBtnSpinner.classList.toggle("hidden", !loading);
-    downloadBtnText.textContent = loading ? "Sedang Mengunduh..." : "Download";
-
-    if (loading) {
-      progressContainer.classList.remove("hidden");
-      updateProgressUI(4, "Menghubungi server & menyiapkan unduhan...");
-    }
-  }
-
-  function isSafeHttpUrl(url) {
-    return typeof url === "string" && /^https?:\/\/[^\s"'<>]+$/i.test(url.trim());
-  }
-
-  function populatePreviewCard(data) {
-    currentMediaInfo = data;
-    previewPlatform.textContent = data.platform || "Video";
-    previewDuration.textContent = data.duration_string || "00:00";
-    previewTitle.textContent = data.title || "Tanpa Judul";
-    previewUploader.textContent = data.uploader ? `Oleh ${data.uploader}` : "";
-
-    if (data.thumbnail && isSafeHttpUrl(data.thumbnail)) {
-      previewThumbnail.src = data.thumbnail;
-      previewThumbnail.classList.remove("hidden");
-      thumbnailFallback.classList.add("hidden");
-      previewThumbnail.onerror = () => {
-        previewThumbnail.classList.add("hidden");
-        thumbnailFallback.classList.remove("hidden");
-      };
-    } else {
-      previewThumbnail.removeAttribute("src");
-      previewThumbnail.classList.add("hidden");
-      thumbnailFallback.classList.remove("hidden");
-    }
-
-    progressContainer.classList.add("hidden");
-    renderQualityOptions();
-    previewSection.classList.remove("hidden");
-  }
-
-  // Handler Cek Video
-  checkForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (isDownloading) return;
-
-    const rawUrl = urlInput.value.trim();
-    if (!rawUrl) {
-      showAlert("Silakan tempel tautan video terlebih dahulu.");
-      urlInput.focus();
-      return;
-    }
-
-    hideAlert();
-    previewSection.classList.add("hidden");
-    setCheckLoading(true);
-
-    try {
+  // --- 3. API Client Layer ---
+  const ApiClient = {
+    async fetchMediaInfo(url) {
       const response = await fetch("/api/info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: rawUrl }),
+        body: JSON.stringify({ url }),
       });
-
-      const payload = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.detail || "Gagal memeriksa tautan video.");
+        throw new Error(data.detail || "Gagal memeriksa tautan media. Pastikan tautan valid dan publik.");
       }
+      return data;
+    },
 
-      populatePreviewCard(payload);
-    } catch (err) {
-      showAlert(err.message || "Terjadi gangguan jaringan saat menghubungi server.");
-    } finally {
-      setCheckLoading(false);
-    }
-  });
+    async pollProgress(taskId) {
+      const res = await fetch(`/api/progress/${encodeURIComponent(taskId)}`);
+      if (!res.ok) return null;
+      return await res.json().catch(() => null);
+    },
 
-  function extractFilenameFromHeaders(response, fallbackExt) {
-    const suggested = response.headers.get("X-Suggested-Filename");
-    if (suggested) {
-      try {
-        return decodeURIComponent(suggested);
-      } catch (_) {
-        // lanjut ke Content-Disposition
-      }
-    }
-
-    const disposition = response.headers.get("Content-Disposition") || "";
-    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-    if (utf8Match && utf8Match[1]) {
-      try {
-        return decodeURIComponent(utf8Match[1]);
-      } catch (_) {
-        // lanjut ke fallback ASCII
-      }
-    }
-
-    const asciiMatch = disposition.match(/filename="([^"]+)"/i);
-    if (asciiMatch && asciiMatch[1]) {
-      return asciiMatch[1];
-    }
-
-    return `Dondu_Media.${fallbackExt}`;
-  }
-
-  function generateTaskId() {
-    if (window.crypto && typeof window.crypto.randomUUID === "function") {
-      return window.crypto.randomUUID();
-    }
-    return "task_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
-  }
-
-  function startProgressPolling(taskId) {
-    stopProgressPolling();
-    progressInterval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/progress/${encodeURIComponent(taskId)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data && typeof data.percent === "number") {
-          updateProgressUI(data.percent, data.message);
-        }
-      } catch (_) {
-        // Abaikan error jaringan sementara saat polling
-      }
-    }, 800);
-  }
-
-  function stopProgressPolling() {
-    if (progressInterval) {
-      clearInterval(progressInterval);
-      progressInterval = null;
-    }
-  }
-
-  // Handler Download Video / MP3
-  downloadBtn.addEventListener("click", async () => {
-    if (!currentMediaInfo || isDownloading) return;
-
-    hideAlert();
-    const taskId = generateTaskId();
-    const chosenQuality = qualitySelect.value || "best";
-    const targetUrl = currentMediaInfo.webpage_url || urlInput.value.trim();
-
-    setDownloadLoading(true);
-    startProgressPolling(taskId);
-
-    try {
+    async initiateDownload(url, format, quality, taskId) {
       const response = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url: targetUrl,
-          format_type: selectedFormat,
-          quality: chosenQuality,
+          url,
+          format_type: format,
+          quality,
           task_id: taskId,
         }),
       });
-
       if (!response.ok) {
-        const errPayload = await response.json().catch(() => ({}));
-        throw new Error(errPayload.detail || "Gagal mengunduh file media.");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Gagal memproses pengunduhan media.");
+      }
+      return response;
+    },
+  };
+
+  // --- 4. Utilities ---
+  const Utils = {
+    isSafeHttpUrl(url) {
+      return typeof url === "string" && /^https?:\/\/[^\s"'<>]+$/i.test(url.trim());
+    },
+
+    extractUrlFromText(rawText) {
+      if (!rawText) return "";
+      const trimmed = rawText.trim();
+      const match = trimmed.match(/https?:\/\/[^\s"'<>]+/i);
+      return match ? match[0] : trimmed;
+    },
+
+    formatBytes(bytes) {
+      if (!bytes || bytes <= 0) return "";
+      const mb = bytes / (1024 * 1024);
+      if (mb >= 1) {
+        return ` (~${mb.toFixed(1)} MB)`;
+      }
+      const kb = bytes / 1024;
+      return ` (~${Math.round(kb)} KB)`;
+    },
+
+    generateTaskId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return "task_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+    },
+
+    extractFilename(response, fallbackExt) {
+      const suggested = response.headers.get("X-Suggested-Filename");
+      if (suggested) {
+        try {
+          return decodeURIComponent(suggested);
+        } catch (_) {}
+      }
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      if (utf8Match && utf8Match[1]) {
+        try {
+          return decodeURIComponent(utf8Match[1]);
+        } catch (_) {}
+      }
+      const asciiMatch = disposition.match(/filename="([^"]+)"/i);
+      if (asciiMatch && asciiMatch[1]) {
+        return asciiMatch[1];
+      }
+      return `Dondu_Media.${fallbackExt}`;
+    },
+  };
+
+  // --- 5. UI Controller ---
+  const UI = {
+    init() {
+      if (DOM.currentYear) {
+        DOM.currentYear.textContent = String(new Date().getFullYear());
+      }
+      this.syncInputState();
+      this.bindEvents();
+    },
+
+    showAlert(message) {
+      DOM.alertMessage.textContent = message;
+      DOM.alertBox.classList.remove("hidden");
+    },
+
+    hideAlert() {
+      DOM.alertMessage.textContent = "";
+      DOM.alertBox.classList.add("hidden");
+    },
+
+    syncInputState() {
+      const hasText = DOM.urlInput.value.trim().length > 0;
+      DOM.urlInput.classList.toggle("has-value", hasText);
+      DOM.clearInputBtn.classList.toggle("hidden", !hasText);
+      if (DOM.pasteInputBtn) {
+        DOM.pasteInputBtn.classList.toggle("hidden", hasText);
+      }
+    },
+
+    setCheckLoading(loading) {
+      DOM.checkBtn.disabled = loading;
+      DOM.urlInput.readOnly = loading;
+      if (DOM.pasteInputBtn) DOM.pasteInputBtn.disabled = loading;
+      if (DOM.clearInputBtn) DOM.clearInputBtn.disabled = loading;
+      DOM.checkBtnSpinner.classList.toggle("hidden", !loading);
+      DOM.checkBtnText.textContent = loading ? "Memeriksa..." : "Periksa Media";
+    },
+
+    updateProgress(percent, message) {
+      const safePct = Math.max(0, Math.min(100, Math.round(percent)));
+      DOM.progressStatusText.textContent = message || "Memproses alur kerja...";
+      DOM.progressPercentText.textContent = `${safePct}%`;
+      DOM.progressBarFill.style.width = `${safePct}%`;
+      DOM.progressBarTrack.setAttribute("aria-valuenow", String(safePct));
+    },
+
+    setDownloadLoading(loading) {
+      State.isDownloading = loading;
+      DOM.downloadBtn.disabled = loading;
+      DOM.checkBtn.disabled = loading;
+      DOM.qualitySelect.disabled = loading;
+      DOM.toggleVideoBtn.disabled = loading;
+      DOM.toggleAudioBtn.disabled = loading;
+
+      DOM.downloadBtnIcon.classList.toggle("hidden", loading);
+      DOM.downloadBtnSpinner.classList.toggle("hidden", !loading);
+      DOM.downloadBtnText.textContent = loading ? "Sedang Memproses..." : "Mulai Unduh & Transcoding";
+
+      if (loading) {
+        DOM.progressContainer.classList.remove("hidden");
+        this.updateProgress(4, "Menghubungi engine & menyiapkan slot pipeline...");
+      }
+    },
+
+    renderQualityOptions() {
+      if (!State.mediaInfo) return;
+      DOM.qualitySelect.innerHTML = "";
+
+      if (State.format === "video") {
+        DOM.qualitySelectLabel.textContent = "Resolusi Video (MP4)";
+        if (DOM.specCodec) DOM.specCodec.textContent = "H.264 / AAC Universal";
+        const qualities = State.mediaInfo.video_qualities || [{ value: "best", label: "Resolusi Terbaik Otomatis" }];
+        qualities.forEach((q) => {
+          const opt = document.createElement("option");
+          opt.value = q.value;
+          const sizeHint = q.filesize_approx ? Utils.formatBytes(q.filesize_approx) : "";
+          opt.textContent = `${q.label}${sizeHint}`;
+          DOM.qualitySelect.appendChild(opt);
+        });
+      } else {
+        DOM.qualitySelectLabel.textContent = "Bitrate Audio (MP3)";
+        if (DOM.specCodec) DOM.specCodec.textContent = "MPEG Layer-3 (ID3v2)";
+        const bitrateLabels = {
+          320: "320 kbps (Kualitas Studio)",
+          256: "256 kbps (High Fidelity)",
+          192: "192 kbps (Standard)",
+          128: "128 kbps (Compact)",
+        };
+        const bitrates = State.mediaInfo.audio_bitrates || [128, 192, 256, 320];
+        [...bitrates]
+          .sort((a, b) => b - a)
+          .forEach((kbps) => {
+            const opt = document.createElement("option");
+            opt.value = String(kbps);
+            opt.textContent = bitrateLabels[kbps] || `${kbps} kbps`;
+            if (kbps === 192) opt.selected = true;
+            DOM.qualitySelect.appendChild(opt);
+          });
+      }
+    },
+
+    setFormat(newFormat) {
+      if (State.isDownloading) return;
+      State.format = newFormat;
+      const isVideo = newFormat === "video";
+      DOM.toggleVideoBtn.classList.toggle("active", isVideo);
+      DOM.toggleVideoBtn.setAttribute("aria-selected", String(isVideo));
+      DOM.toggleAudioBtn.classList.toggle("active", !isVideo);
+      DOM.toggleAudioBtn.setAttribute("aria-selected", String(!isVideo));
+      DOM.progressContainer.classList.add("hidden");
+      this.renderQualityOptions();
+    },
+
+    populatePreview(data) {
+      State.mediaInfo = data;
+      DOM.previewPlatform.textContent = (data.platform || "MEDIA").toUpperCase();
+      DOM.previewDuration.textContent = data.duration_string || "00:00";
+      DOM.previewTitle.textContent = data.title || "Tanpa Judul";
+      DOM.previewUploader.textContent = data.uploader ? `Kreator: ${data.uploader}` : "Kreator tidak terdaftar";
+
+      if (data.thumbnail && Utils.isSafeHttpUrl(data.thumbnail)) {
+        DOM.previewThumbnail.src = data.thumbnail;
+        DOM.previewThumbnail.classList.remove("hidden");
+        DOM.thumbnailFallback.classList.add("hidden");
+        DOM.previewThumbnail.onerror = () => {
+          DOM.previewThumbnail.classList.add("hidden");
+          DOM.thumbnailFallback.classList.remove("hidden");
+        };
+      } else {
+        DOM.previewThumbnail.removeAttribute("src");
+        DOM.previewThumbnail.classList.add("hidden");
+        DOM.thumbnailFallback.classList.remove("hidden");
       }
 
-      stopProgressPolling();
-      updateProgressUI(96, "Menerima file ke browser Anda...");
+      if (DOM.specStatus) {
+        DOM.specStatus.textContent = "Verified & Ready";
+      }
 
-      const blob = await response.blob();
-      const ext = selectedFormat === "audio" ? "mp3" : "mp4";
-      const filename = extractFilenameFromHeaders(response, ext);
+      DOM.progressContainer.classList.add("hidden");
+      this.renderQualityOptions();
+      DOM.previewSection.classList.remove("hidden");
+    },
 
-      const blobUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = blobUrl;
-      anchor.download = filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    bindEvents() {
+      // Input typing & paste events
+      DOM.urlInput.addEventListener("input", () => {
+        this.syncInputState();
+        const currentVal = DOM.urlInput.value.trim();
+        if (State.mediaInfo && currentVal !== (State.mediaInfo.webpage_url || "").trim()) {
+          DOM.previewSection.classList.add("hidden");
+          DOM.progressContainer.classList.add("hidden");
+          State.reset();
+        }
+      });
 
-      updateProgressUI(100, `Selesai! Disimpan sebagai "${filename}"`);
-    } catch (err) {
-      stopProgressPolling();
-      progressContainer.classList.add("hidden");
-      showAlert(err.message || "Gagal mengunduh media. Silakan coba lagi.");
-    } finally {
-      stopProgressPolling();
-      setDownloadLoading(false);
-    }
-  });
+      DOM.urlInput.addEventListener("paste", (event) => {
+        const text = (event.clipboardData || window.clipboardData)?.getData("text");
+        if (text && /https?:\/\//i.test(text)) {
+          event.preventDefault();
+          const extracted = Utils.extractUrlFromText(text);
+          DOM.urlInput.value = extracted;
+          if (State.mediaInfo && extracted !== (State.mediaInfo.webpage_url || "").trim()) {
+            DOM.previewSection.classList.add("hidden");
+            DOM.progressContainer.classList.add("hidden");
+            State.reset();
+          }
+          this.syncInputState();
+          this.hideAlert();
+        }
+      });
+
+      if (DOM.pasteInputBtn) {
+        DOM.pasteInputBtn.addEventListener("click", async () => {
+          this.hideAlert();
+          if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
+            DOM.urlInput.focus();
+            this.showAlert("Akses clipboard browser tidak tersedia. Silakan tekan tahan kolom input lalu pilih Tempel.");
+            return;
+          }
+          try {
+            const clipText = await navigator.clipboard.readText();
+            const extracted = Utils.extractUrlFromText(clipText);
+            if (!extracted) {
+              this.showAlert("Clipboard kosong. Salin tautan media terlebih dahulu.");
+              DOM.urlInput.focus();
+              return;
+            }
+            DOM.urlInput.value = extracted;
+            if (State.mediaInfo && extracted !== (State.mediaInfo.webpage_url || "").trim()) {
+              DOM.previewSection.classList.add("hidden");
+              DOM.progressContainer.classList.add("hidden");
+              State.reset();
+            }
+            this.syncInputState();
+            DOM.urlInput.focus();
+          } catch (_) {
+            DOM.urlInput.focus();
+            this.showAlert("Izin akses clipboard ditolak. Silakan tempel secara manual.");
+          }
+        });
+      }
+
+      DOM.clearInputBtn.addEventListener("click", () => {
+        DOM.urlInput.value = "";
+        this.hideAlert();
+        DOM.previewSection.classList.add("hidden");
+        DOM.progressContainer.classList.add("hidden");
+        State.reset();
+        this.syncInputState();
+        DOM.urlInput.focus();
+      });
+
+      // Format switchers
+      DOM.toggleVideoBtn.addEventListener("click", () => this.setFormat("video"));
+      DOM.toggleAudioBtn.addEventListener("click", () => this.setFormat("audio"));
+
+      // Quality selector change resets prior progress completion banner
+      DOM.qualitySelect.addEventListener("change", () => {
+        if (!State.isDownloading) {
+          DOM.progressContainer.classList.add("hidden");
+        }
+      });
+
+      // Form submission
+      DOM.checkForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (State.isDownloading) return;
+
+        const rawUrl = DOM.urlInput.value.trim();
+        if (!rawUrl) {
+          this.showAlert("Silakan masukkan tautan media terlebih dahulu.");
+          DOM.urlInput.focus();
+          return;
+        }
+
+        this.hideAlert();
+        DOM.previewSection.classList.add("hidden");
+        this.setCheckLoading(true);
+
+        try {
+          const data = await ApiClient.fetchMediaInfo(rawUrl);
+          this.populatePreview(data);
+        } catch (err) {
+          this.showAlert(err.message || "Gagal menghubungkan ke server engine.");
+        } finally {
+          this.setCheckLoading(false);
+        }
+      });
+
+      // Download trigger
+      DOM.downloadBtn.addEventListener("click", async () => {
+        if (!State.mediaInfo || State.isDownloading) return;
+
+        this.hideAlert();
+        const taskId = Utils.generateTaskId();
+        State.activeTaskId = taskId;
+        const chosenQuality = DOM.qualitySelect.value || "best";
+        const targetUrl = State.mediaInfo.webpage_url || DOM.urlInput.value.trim();
+
+        this.setDownloadLoading(true);
+        this.startPolling(taskId);
+
+        try {
+          const response = await ApiClient.initiateDownload(targetUrl, State.format, chosenQuality, taskId);
+
+          this.stopPolling();
+
+          let blob;
+          const contentLength = response.headers.get("Content-Length");
+          const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+          if (response.body && totalBytes > 0 && typeof ReadableStream !== "undefined") {
+            const reader = response.body.getReader();
+            let receivedBytes = 0;
+            const chunks = [];
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              receivedBytes += value.length;
+              const streamPct = 85 + Math.round((receivedBytes / totalBytes) * 14);
+              const mbDone = (receivedBytes / (1024 * 1024)).toFixed(1);
+              const mbTotal = (totalBytes / (1024 * 1024)).toFixed(1);
+              this.updateProgress(streamPct, `Mentransfer file (${mbDone} MB / ${mbTotal} MB)...`);
+            }
+            blob = new Blob(chunks, { type: response.headers.get("Content-Type") || "application/octet-stream" });
+          } else {
+            this.updateProgress(94, "Menerima aliran data ke browser...");
+            blob = await response.blob();
+          }
+
+          const ext = State.format === "audio" ? "mp3" : "mp4";
+          const filename = Utils.extractFilename(response, ext);
+
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+          this.updateProgress(100, `Transcoding selesai. Disimpan sebagai "${filename}"`);
+        } catch (err) {
+          this.stopPolling();
+          DOM.progressContainer.classList.add("hidden");
+          this.showAlert(err.message || "Gagal memproses alur kerja unduhan.");
+        } finally {
+          this.stopPolling();
+          this.setDownloadLoading(false);
+        }
+      });
+    },
+
+    startPolling(taskId) {
+      this.stopPolling();
+      State.progressTimer = setInterval(async () => {
+        try {
+          const data = await ApiClient.pollProgress(taskId);
+          if (data && typeof data.percent === "number") {
+            this.updateProgress(data.percent, data.message);
+          }
+        } catch (_) {}
+      }, 750);
+    },
+
+    stopPolling() {
+      if (State.progressTimer) {
+        clearInterval(State.progressTimer);
+        State.progressTimer = null;
+      }
+    },
+  };
+
+  // --- 6. Global Keyboard Shortcuts ---
+  const Shortcuts = {
+    init() {
+      const isMac = typeof navigator !== "undefined" && /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform || navigator.userAgent);
+      if (DOM.shortcutHint && isMac) {
+        DOM.shortcutHint.innerHTML = "<kbd>⌘V</kbd> tempel otomatis";
+      }
+
+      window.addEventListener("keydown", (e) => {
+        // Focus search/URL input with / or Ctrl+K / Cmd+K
+        if ((e.key === "/" || ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K"))) && document.activeElement !== DOM.urlInput) {
+          e.preventDefault();
+          DOM.urlInput.focus();
+          DOM.urlInput.select();
+          return;
+        }
+
+        // Global Ctrl+V / Cmd+V auto-focus and clipboard read
+        if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
+          if (document.activeElement !== DOM.urlInput) {
+            DOM.urlInput.focus();
+            if (navigator.clipboard && typeof navigator.clipboard.readText === "function") {
+              navigator.clipboard.readText().then((clipText) => {
+                const extracted = Utils.extractUrlFromText(clipText);
+                if (extracted) {
+                  DOM.urlInput.value = extracted;
+                  if (State.mediaInfo && extracted !== (State.mediaInfo.webpage_url || "").trim()) {
+                    DOM.previewSection.classList.add("hidden");
+                    DOM.progressContainer.classList.add("hidden");
+                    State.reset();
+                  }
+                  UI.syncInputState();
+                  UI.hideAlert();
+                }
+              }).catch(() => {
+                // Clipboard permissions might require user interaction; input is focused for native paste
+              });
+            }
+          }
+          return;
+        }
+
+        // Esc to clear input, hide preview, & dismiss alert
+        if (e.key === "Escape") {
+          if (!State.isDownloading) {
+            UI.hideAlert();
+            if (document.activeElement === DOM.urlInput) {
+              DOM.urlInput.value = "";
+              DOM.previewSection.classList.add("hidden");
+              DOM.progressContainer.classList.add("hidden");
+              State.reset();
+              UI.syncInputState();
+            }
+          }
+        }
+      });
+    },
+  };
+
+  // --- 7. Theme Controller ---
+  const ThemeManager = {
+    STORAGE_KEY: "dondu_theme",
+
+    init() {
+      const saved = localStorage.getItem(this.STORAGE_KEY);
+      if (saved === "dark" || saved === "light") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+
+      DOM.themeToggleBtn.addEventListener("click", () => {
+        const root = document.documentElement;
+        const current = root.getAttribute("data-theme");
+        const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const isDark = current ? current === "dark" : systemDark;
+        const next = isDark ? "light" : "dark";
+        root.setAttribute("data-theme", next);
+        localStorage.setItem(this.STORAGE_KEY, next);
+      });
+    },
+  };
+
+  // --- Application Bootstrap ---
+  ThemeManager.init();
+  Shortcuts.init();
+  UI.init();
 })();
-
