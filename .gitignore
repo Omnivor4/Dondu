@@ -10,6 +10,7 @@ temp_downloads/
 .DS_Store
 Thumbs.db
 .superpowers/
+.agents/
 # Databases & local persistent storage
 data/
 *.db

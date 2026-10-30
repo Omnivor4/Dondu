@@ -133,7 +133,10 @@
         headers: this.getHeaders(),
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Gagal memperbarui komentar");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Gagal memperbarui komentar");
+      }
       return await res.json();
     },
 
@@ -142,7 +145,10 @@
         method: "DELETE",
         headers: this.getHeaders(),
       });
-      if (!res.ok) throw new Error("Gagal menghapus komentar");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Gagal menghapus komentar");
+      }
       return await res.json();
     },
   };
@@ -254,9 +260,40 @@
     },
 
     async loadComments() {
-      const comments = await AdminApi.fetchComments();
-      AdminState.comments = comments;
-      this.renderCommentsTable(comments);
+      const serverComments = (await AdminApi.fetchComments().catch(() => [])) || [];
+      const mergedMap = new Map();
+      serverComments.forEach((c) => mergedMap.set(c.id, c));
+
+      // Sinkronkan juga cache lokal jika serverless cold-start atau baru
+      try {
+        const localRaw = localStorage.getItem("dondu_comments_prod");
+        const localComments = localRaw ? JSON.parse(localRaw) : [];
+        if (Array.isArray(localComments)) {
+          localComments.forEach((lc) => {
+            if (!mergedMap.has(lc.id)) {
+              mergedMap.set(lc.id, {
+                id: lc.id,
+                author: lc.author || "Anonymous",
+                badge: lc.badge || "",
+                text: lc.text || "",
+                created_at: lc.timestamp || new Date().toISOString(),
+                status: "active",
+                is_pinned: Boolean(lc.isPinned),
+              });
+            }
+          });
+        }
+      } catch (_) {}
+
+      const allComments = Array.from(mergedMap.values()).sort((a, b) => {
+        if (Boolean(b.is_pinned) !== Boolean(a.is_pinned)) {
+          return Boolean(b.is_pinned) ? 1 : -1;
+        }
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      });
+
+      AdminState.comments = allComments;
+      this.renderCommentsTable(allComments);
     },
 
     renderCommentsTable(comments) {
@@ -389,6 +426,18 @@
               is_pinned: isPinned,
               status,
             });
+            try {
+              const localRaw = localStorage.getItem("dondu_comments_prod");
+              const localList = localRaw ? JSON.parse(localRaw) : [];
+              const idx = localList.findIndex((item) => item.id === cid);
+              if (idx !== -1) {
+                localList[idx].author = author;
+                localList[idx].badge = badge;
+                localList[idx].text = text;
+                localList[idx].isPinned = isPinned;
+                localStorage.setItem("dondu_comments_prod", JSON.stringify(localList));
+              }
+            } catch (_) {}
           } else {
             // Create
             await AdminApi.createComment(author, text);
@@ -445,6 +494,12 @@
           if (confirm("Apakah Anda yakin ingin menghapus komentar ini secara permanen?")) {
             try {
               await AdminApi.deleteComment(cid);
+              try {
+                const localRaw = localStorage.getItem("dondu_comments_prod");
+                const localList = localRaw ? JSON.parse(localRaw) : [];
+                const filtered = localList.filter((item) => item.id !== cid);
+                localStorage.setItem("dondu_comments_prod", JSON.stringify(filtered));
+              } catch (_) {}
               await this.loadComments();
               await this.loadAnalytics();
             } catch (err) {

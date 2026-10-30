@@ -1,5 +1,6 @@
 import re
 import unittest
+from datetime import datetime
 from pathlib import Path
 from fastapi.testclient import TestClient
 
@@ -125,3 +126,27 @@ class TestAdminDashboardAndAnalytics(unittest.TestCase):
         res_list_after = self.client.get("/api/comments")
         comments_after = res_list_after.json()["comments"]
         self.assertFalse(any(c["id"] == comment_id for c in comments_after))
+
+    def test_comment_update_upsert_serverless_coldstart(self):
+        """Pastikan update komentar pada container serverless baru yang belum punya ID di SQLite tidak 404 (UPSERT)."""
+        phantom_id = f"c_phantom_{int(datetime.now().timestamp() * 1000)}"
+        update_payload = {
+            "author": "Admin Recovery",
+            "text": "Konten komentar yang dipulihkan pada serverless fresh instance.",
+            "badge": "Admin",
+            "is_pinned": True,
+            "status": "active",
+        }
+        res = self.client.put(
+            f"/api/admin/comments/{phantom_id}",
+            json=update_payload,
+            headers={"X-Admin-Key": self.admin_key},
+        )
+        self.assertEqual(res.status_code, 200, "Update komentar tidak boleh 404 pada container serverless baru")
+        data = res.json()["comment"]
+        self.assertEqual(data["id"], phantom_id)
+        self.assertEqual(data["author"], "Admin Recovery")
+        self.assertEqual(data["text"], "Konten komentar yang dipulihkan pada serverless fresh instance.")
+
+        # Cleanup
+        self.client.delete(f"/api/admin/comments/{phantom_id}", headers={"X-Admin-Key": self.admin_key})

@@ -312,6 +312,25 @@ def get_analytics_summary() -> Dict[str, Any]:
 
 def get_public_comments() -> List[Dict[str, Any]]:
     """Returns active comments for the public user interface."""
+    firestore_items: List[Dict[str, Any]] = []
+    if firestore_client:
+        try:
+            docs = (
+                firestore_client.collection("comments")
+                .where("status", "==", "active")
+                .order_by("is_pinned", direction=firestore.Query.DESCENDING)
+                .order_by("created_at", direction=firestore.Query.DESCENDING)
+                .limit(100)
+                .stream()
+            )
+            for doc in docs:
+                firestore_items.append(doc.to_dict())
+        except Exception as e:
+            logger.debug("Firestore get_public_comments: %s", e)
+
+    if firestore_items:
+        return firestore_items
+
     with get_db_cursor() as cursor:
         cursor.execute("""
             SELECT id, author, badge, text, created_at, is_pinned
@@ -325,6 +344,52 @@ def get_public_comments() -> List[Dict[str, Any]]:
 
 def get_all_comments_admin() -> List[Dict[str, Any]]:
     """Returns all comments (including hidden) for admin management."""
+    firestore_items: List[Dict[str, Any]] = []
+    if firestore_client:
+        try:
+            docs = (
+                firestore_client.collection("comments")
+                .order_by("is_pinned", direction=firestore.Query.DESCENDING)
+                .order_by("created_at", direction=firestore.Query.DESCENDING)
+                .stream()
+            )
+            for doc in docs:
+                d = doc.to_dict()
+                if d.get("status") != "deleted":
+                    firestore_items.append(d)
+        except Exception as e:
+            logger.debug("Firestore get_all_comments_admin: %s", e)
+
+    if firestore_items:
+        try:
+            with get_db_cursor() as cursor:
+                for item in firestore_items:
+                    cursor.execute(
+                        """
+                        INSERT INTO comments (id, author, badge, text, created_at, status, device_id, is_pinned)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            author = excluded.author,
+                            badge = excluded.badge,
+                            text = excluded.text,
+                            status = excluded.status,
+                            is_pinned = excluded.is_pinned
+                        """,
+                        (
+                            item.get("id"),
+                            item.get("author", "Anonymous"),
+                            item.get("badge", ""),
+                            item.get("text", ""),
+                            item.get("created_at", datetime.now(timezone.utc).isoformat()),
+                            item.get("status", "active"),
+                            item.get("device_id", ""),
+                            1 if item.get("is_pinned") else 0,
+                        ),
+                    )
+        except Exception as e:
+            logger.debug("SQLite sync from firestore: %s", e)
+        return firestore_items
+
     with get_db_cursor() as cursor:
         cursor.execute("""
             SELECT id, author, badge, text, created_at, status, device_id, is_pinned
@@ -393,38 +458,54 @@ def update_comment(
     status: Optional[str] = None,
     is_pinned: Optional[bool] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Updates an existing comment (admin function)."""
+    """Updates an existing comment or gracefully upserts if on serverless fresh container."""
+    now = datetime.now(timezone.utc).isoformat()
     with get_db_cursor() as cursor:
         cursor.execute("SELECT * FROM comments WHERE id = ?", (comment_id,))
         row = cursor.fetchone()
-        if not row:
-            return None
 
-        current = dict(row)
-        new_author = author.strip()[:50] if author is not None else current["author"]
-        new_text = text.strip()[:500] if text is not None else current["text"]
-        new_badge = badge.strip()[:30] if badge is not None else current["badge"]
-        new_status = status.strip() if status is not None else current["status"]
-        new_pinned = (1 if is_pinned else 0) if is_pinned is not None else current["is_pinned"]
+        if row:
+            current = dict(row)
+            new_author = author.strip()[:50] if author is not None else current["author"]
+            new_text = text.strip()[:500] if text is not None else current["text"]
+            new_badge = badge.strip()[:30] if badge is not None else current["badge"]
+            new_status = status.strip() if status is not None else current["status"]
+            new_pinned = (1 if is_pinned else 0) if is_pinned is not None else current["is_pinned"]
+            created_at = current["created_at"]
+        else:
+            # Jika di container serverless baru belum tersimpan di SQLite lokal, lakukan upsert toleran
+            new_author = author.strip()[:50] if author is not None and author.strip() else "Anonymous"
+            new_text = text.strip()[:500] if text is not None and text.strip() else "—"
+            new_badge = badge.strip()[:30] if badge is not None else ""
+            new_status = status.strip() if status is not None else "active"
+            new_pinned = (1 if is_pinned else 0) if is_pinned is not None else 0
+            created_at = now
 
         cursor.execute(
             """
-            UPDATE comments
-            SET author = ?, text = ?, badge = ?, status = ?, is_pinned = ?
-            WHERE id = ?
+            INSERT INTO comments (id, author, badge, text, created_at, status, device_id, is_pinned)
+            VALUES (?, ?, ?, ?, ?, ?, '', ?)
+            ON CONFLICT(id) DO UPDATE SET
+                author = excluded.author,
+                text = excluded.text,
+                badge = excluded.badge,
+                status = excluded.status,
+                is_pinned = excluded.is_pinned
             """,
-            (new_author, new_text, new_badge, new_status, new_pinned, comment_id),
+            (comment_id, new_author, new_badge, new_text, created_at, new_status, new_pinned),
         )
 
         if firestore_client:
             try:
-                firestore_client.collection("comments").document(comment_id).update({
+                firestore_client.collection("comments").document(comment_id).set({
+                    "id": comment_id,
                     "author": new_author,
                     "text": new_text,
                     "badge": new_badge,
                     "status": new_status,
                     "is_pinned": bool(new_pinned),
-                })
+                    "created_at": created_at,
+                }, merge=True)
             except Exception as e:
                 logger.debug("Firestore update_comment: %s", e)
 
@@ -435,23 +516,22 @@ def update_comment(
             "badge": new_badge,
             "status": new_status,
             "is_pinned": new_pinned,
-            "created_at": current["created_at"],
+            "created_at": created_at,
         }
 
 
 def delete_comment(comment_id: str) -> bool:
-    """Soft deletes or hard deletes a comment."""
+    """Soft deletes or hard deletes a comment idempotently."""
     with get_db_cursor() as cursor:
         cursor.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
-        deleted = cursor.rowcount > 0
 
-    if deleted and firestore_client:
+    if firestore_client:
         try:
             firestore_client.collection("comments").document(comment_id).delete()
         except Exception as e:
             logger.debug("Firestore delete_comment: %s", e)
 
-    return deleted
+    return True
 
 
 # Initialize on import safely

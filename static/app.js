@@ -754,7 +754,7 @@
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data.comments)) {
-            const normalized = data.comments.map((c) => ({
+            const serverComments = data.comments.map((c) => ({
               id: c.id,
               author: c.author,
               badge: c.badge || "",
@@ -762,8 +762,25 @@
               timestamp: c.created_at,
               isPinned: Boolean(c.is_pinned),
             }));
-            this.saveComments(normalized);
-            this.render();
+
+            if (serverComments.length > 0) {
+              const currentLocal = this.getComments();
+              const map = new Map();
+              // Server is source of truth for synced comments
+              serverComments.forEach((sc) => map.set(sc.id, sc));
+              // Retain any pending local comment not yet synced
+              currentLocal.forEach((lc) => {
+                if (!map.has(lc.id)) map.set(lc.id, lc);
+              });
+              const merged = Array.from(map.values()).sort((a, b) => {
+                if (Boolean(b.isPinned) !== Boolean(a.isPinned)) {
+                  return Boolean(b.isPinned) ? 1 : -1;
+                }
+                return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
+              });
+              this.saveComments(merged);
+              this.render();
+            }
           }
         }
       } catch (_) {}
