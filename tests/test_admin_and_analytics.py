@@ -1,7 +1,5 @@
-import re
 import unittest
 from datetime import datetime
-from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.config import BASE_DIR, settings
@@ -150,3 +148,37 @@ class TestAdminDashboardAndAnalytics(unittest.TestCase):
 
         # Cleanup
         self.client.delete(f"/api/admin/comments/{phantom_id}", headers={"X-Admin-Key": self.admin_key})
+
+    def test_admin_auth_rejects_query_parameter_key(self):
+        """Pastikan kunci admin lewat query parameter (?key=...) ditolak dengan 401."""
+        res = self.client.get(f"/api/admin/analytics?key={self.admin_key}")
+        self.assertEqual(res.status_code, 401)
+
+    def test_admin_auth_accepts_bearer_token(self):
+        """Pastikan otentikasi admin mendukung header Authorization: Bearer <key>."""
+        res = self.client.get("/api/admin/analytics", headers={"Authorization": f"Bearer {self.admin_key}"})
+        self.assertEqual(res.status_code, 200)
+
+    def test_admin_login_rate_limiting_and_token_generation(self):
+        """Pastikan /api/admin/login menerapkan rate limiter dan menghasilkan token sesi HMAC tanpa membocorkan passkey."""
+        from app.main import admin_login_rate_limiter
+        admin_login_rate_limiter._hits.clear()
+
+        # Login sukses -> token bertanda tangan sess_
+        res = self.client.post("/api/admin/login", json={"passkey": self.admin_key})
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        token = data.get("token")
+        self.assertTrue(token.startswith("sess_"))
+        self.assertNotEqual(token, self.admin_key)  # Passkey tidak boleh bocor langsung
+
+        # Gunakan token sesi untuk mengakses endpoint terproteksi
+        res_auth = self.client.get("/api/admin/analytics", headers={"X-Admin-Key": token})
+        self.assertEqual(res_auth.status_code, 200)
+
+        # Brute force / spam login -> rate limiter 429
+        for _ in range(5):
+            self.client.post("/api/admin/login", json={"passkey": "wrong_password"})
+        res_blocked = self.client.post("/api/admin/login", json={"passkey": self.admin_key})
+        self.assertEqual(res_blocked.status_code, 429)
+        self.assertIn("Retry-After", res_blocked.headers)

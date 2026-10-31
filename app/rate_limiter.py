@@ -1,3 +1,4 @@
+import ipaddress
 import math
 import time
 from collections import deque
@@ -44,12 +45,16 @@ class SlidingWindowRateLimiter:
         headers = getattr(req, "headers", {}) or {}
 
         if trust:
-            forwarded = headers.get("x-forwarded-for")
+            # Prioritaskan x-vercel-forwarded-for atau x-forwarded-for.
+            # Pada reverse proxy (Vercel/Nginx/Cloudflare), IP client yang dapat dipercaya
+            # ditambahkan di posisi paling kanan (rightmost) oleh proxy terdekat.
+            forwarded = headers.get("x-vercel-forwarded-for") or headers.get("x-forwarded-for")
             if forwarded:
-                raw_ip = str(forwarded).split(",")[0].strip()
+                raw_ip = str(forwarded).split(",")[-1].strip()
             elif headers.get("x-real-ip"):
                 raw_ip = str(headers.get("x-real-ip")).strip()
 
+        # Fallback ke socket client langsung jika header proxy tidak ada atau trust=False
         if not raw_ip:
             client = getattr(req, "client", None)
             if client and getattr(client, "host", None):
@@ -62,10 +67,31 @@ class SlidingWindowRateLimiter:
         if not cleaned:
             return "unknown"
 
-        if len(cleaned) > 64:
-            cleaned = cleaned[:64]
+        # Tangani notasi IPv6 dengan kurung [::1] atau port IPv4 (1.2.3.4:8080)
+        if cleaned.startswith("[") and "]" in cleaned:
+            cleaned = cleaned.split("]")[0].lstrip("[")
+        elif cleaned.count(":") == 1:
+            cleaned = cleaned.split(":")[0]
 
-        return cleaned
+        # Validasi sintaks IP untuk mencegah pemalsuan string non-IP dan polusi memori
+        try:
+            ip_obj = ipaddress.ip_address(cleaned)
+            return str(ip_obj)
+        except ValueError:
+            # Jika IP dari proxy tidak valid secara sintaks, fallback ke host TCP client langsung
+            client = getattr(req, "client", None)
+            if client and getattr(client, "host", None):
+                fallback_host = str(client.host).strip()
+                if fallback_host == "testclient":
+                    return "testclient"
+                try:
+                    ip_obj = ipaddress.ip_address(fallback_host)
+                    return str(ip_obj)
+                except ValueError:
+                    pass
+            if cleaned == "testclient":
+                return "testclient"
+            return "unknown"
 
     def check(self, request: Request) -> None:
         now = time.monotonic()

@@ -6,7 +6,6 @@ Handles Device Analytics Recognition & Comments CRUD
 import json
 import logging
 import os
-import re
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -18,23 +17,65 @@ from app.config import BASE_DIR
 
 logger = logging.getLogger("dondu.db")
 
-is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
-if is_serverless:
-    DATA_DIR: Path = Path("/tmp")
-    DB_PATH: Path = Path("/tmp/dondu.db")
-else:
-    DATA_DIR: Path = BASE_DIR / "data"
+
+def _resolve_data_dir_and_db_path() -> tuple[Path, Path]:
+    """
+    Resolve SQLite DATA_DIR and DB_PATH with automatic fallback.
+    Honors DB_PATH environment variable if set.
+    Falls back to /tmp if running under serverless or if target directory is read-only.
+    """
+    env_db_path = os.getenv("DB_PATH")
+    if env_db_path:
+        db_p = Path(env_db_path).resolve()
+        data_d = db_p.parent
+        try:
+            data_d.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        return data_d, db_p
+
+    is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+    if is_serverless:
+        tmp_dir = Path("/tmp")
+        return tmp_dir, tmp_dir / "dondu.db"
+
+    target_dir = BASE_DIR / "data"
     try:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
-    DB_PATH: Path = DATA_DIR / "dondu.db"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        # Test writeability probe
+        probe = target_dir / f".write_probe_{os.getpid()}"
+        probe.touch()
+        probe.unlink(missing_ok=True)
+        return target_dir, target_dir / "dondu.db"
+    except (OSError, PermissionError) as exc:
+        logger.warning(
+            "Target data directory '%s' is not writable (%s). Falling back to /tmp.",
+            target_dir,
+            exc,
+        )
+        tmp_dir = Path("/tmp")
+        try:
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        return tmp_dir, tmp_dir / "dondu.db"
+
+
+DATA_DIR, DB_PATH = _resolve_data_dir_and_db_path()
 
 # Inisialisasi Firebase Admin SDK jika file kredensial atau env var tersedia
 firestore_client = None
+FieldFilter = None
 try:
     import firebase_admin
     from firebase_admin import credentials, firestore
+    try:
+        from google.cloud.firestore import FieldFilter
+    except ImportError:
+        try:
+            from google.cloud.firestore_v1.base_query import FieldFilter
+        except ImportError:
+            FieldFilter = None
 
     cred = None
     service_account_raw = os.getenv("FIREBASE_SERVICE_ACCOUNT") or os.getenv("FIREBASE_CREDENTIALS")
@@ -112,12 +153,29 @@ def parse_device_info(user_agent: str, platform: str) -> Dict[str, str]:
 
 @contextmanager
 def get_db_cursor():
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    """
+    Context manager providing a thread-safe SQLite cursor with WAL mode,
+    busy timeout, and automatic rollback on unhandled exceptions.
+    """
+    conn = sqlite3.connect(str(DB_PATH), timeout=10.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 5000;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+    except Exception as pragma_err:
+        logger.debug("SQLite PRAGMA configuration warning: %s", pragma_err)
+
     try:
         cursor = conn.cursor()
         yield cursor
         conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
     finally:
         conn.close()
 
@@ -233,16 +291,17 @@ def record_device_visit(
 
     if firestore_client:
         try:
+            inc = firestore.Increment(1) if hasattr(firestore, "Increment") else visit_count
             firestore_client.collection("devices").document(clean_id).set({
                 "device_id": clean_id,
                 "last_seen_at": now,
-                "visit_count": visit_count,
+                "visit_count": inc,
                 "os": parsed["os"],
                 "browser": parsed["browser"],
                 "device_type": parsed["device_type"],
                 "screen_res": screen_res,
                 "language": language,
-            }, merge=True)
+            }, merge=True, timeout=5.0)
         except Exception as e:
             logger.debug("Firestore device sync: %s", e)
 
@@ -258,6 +317,42 @@ def record_device_visit(
 def get_analytics_summary() -> Dict[str, Any]:
     """Returns analytics overview for the admin dashboard."""
     with get_db_cursor() as cursor:
+        # Jika SQLite kosong pada container serverless baru, pulihkan dari Firestore
+        cursor.execute("SELECT COUNT(*) FROM devices")
+        device_count_check = cursor.fetchone()[0]
+        if device_count_check == 0 and firestore_client:
+            try:
+                device_docs = (
+                    firestore_client.collection("devices")
+                    .order_by("last_seen_at", direction=firestore.Query.DESCENDING)
+                    .limit(100)
+                    .stream(timeout=5.0)
+                )
+                for ddoc in device_docs:
+                    d = ddoc.to_dict()
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO devices (
+                            device_id, first_seen_at, last_seen_at, visit_count,
+                            os, browser, device_type, screen_res, language, last_ip
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            d.get("device_id", ddoc.id),
+                            d.get("first_seen_at", d.get("last_seen_at", "")),
+                            d.get("last_seen_at", ""),
+                            int(d.get("visit_count", 1)),
+                            d.get("os", "Unknown"),
+                            d.get("browser", "Unknown"),
+                            d.get("device_type", "Desktop"),
+                            d.get("screen_res", ""),
+                            d.get("language", ""),
+                            d.get("last_ip", ""),
+                        ),
+                    )
+            except Exception as e:
+                logger.debug("Firestore devices restore on cold start: %s", e)
+
         # Total unique devices
         cursor.execute("SELECT COUNT(*) FROM devices")
         total_devices = cursor.fetchone()[0]
@@ -315,13 +410,18 @@ def get_public_comments() -> List[Dict[str, Any]]:
     firestore_items: List[Dict[str, Any]] = []
     if firestore_client:
         try:
+            col_ref = firestore_client.collection("comments")
+            if FieldFilter is not None:
+                query = col_ref.where(filter=FieldFilter("status", "==", "active"))
+            else:
+                query = col_ref.where("status", "==", "active")
+
             docs = (
-                firestore_client.collection("comments")
-                .where("status", "==", "active")
+                query
                 .order_by("is_pinned", direction=firestore.Query.DESCENDING)
                 .order_by("created_at", direction=firestore.Query.DESCENDING)
                 .limit(100)
-                .stream()
+                .stream(timeout=5.0)
             )
             for doc in docs:
                 firestore_items.append(doc.to_dict())
@@ -329,6 +429,34 @@ def get_public_comments() -> List[Dict[str, Any]]:
             logger.debug("Firestore get_public_comments: %s", e)
 
     if firestore_items:
+        # Sinkronisasi / cache ke SQLite lokal
+        try:
+            with get_db_cursor() as cursor:
+                for item in firestore_items:
+                    cursor.execute(
+                        """
+                        INSERT INTO comments (id, author, badge, text, created_at, status, device_id, is_pinned)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            author = excluded.author,
+                            badge = excluded.badge,
+                            text = excluded.text,
+                            status = excluded.status,
+                            is_pinned = excluded.is_pinned
+                        """,
+                        (
+                            item.get("id"),
+                            item.get("author", "Anonymous"),
+                            item.get("badge", ""),
+                            item.get("text", ""),
+                            item.get("created_at", datetime.now(timezone.utc).isoformat()),
+                            item.get("status", "active"),
+                            item.get("device_id", ""),
+                            1 if item.get("is_pinned") else 0,
+                        ),
+                    )
+        except Exception as e:
+            logger.debug("SQLite cache from firestore public comments: %s", e)
         return firestore_items
 
     with get_db_cursor() as cursor:
@@ -351,7 +479,7 @@ def get_all_comments_admin() -> List[Dict[str, Any]]:
                 firestore_client.collection("comments")
                 .order_by("is_pinned", direction=firestore.Query.DESCENDING)
                 .order_by("created_at", direction=firestore.Query.DESCENDING)
-                .stream()
+                .stream(timeout=5.0)
             )
             for doc in docs:
                 d = doc.to_dict()
@@ -435,7 +563,7 @@ def add_comment(
                 "status": "active",
                 "device_id": device_id,
                 "is_pinned": bool(is_pinned),
-            })
+            }, timeout=5.0)
         except Exception as e:
             logger.debug("Firestore add_comment: %s", e)
 
@@ -505,7 +633,7 @@ def update_comment(
                     "status": new_status,
                     "is_pinned": bool(new_pinned),
                     "created_at": created_at,
-                }, merge=True)
+                }, merge=True, timeout=5.0)
             except Exception as e:
                 logger.debug("Firestore update_comment: %s", e)
 
@@ -527,7 +655,7 @@ def delete_comment(comment_id: str) -> bool:
 
     if firestore_client:
         try:
-            firestore_client.collection("comments").document(comment_id).delete()
+            firestore_client.collection("comments").document(comment_id).delete(timeout=5.0)
         except Exception as e:
             logger.debug("Firestore delete_comment: %s", e)
 

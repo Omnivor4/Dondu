@@ -254,6 +254,11 @@
       background-color: var(--accent-soft);
     }
 
+    .btn-action:focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: 2px;
+    }
+
     .btn-action-delete:hover {
       background-color: var(--danger-bg);
       border-color: var(--danger-border);
@@ -388,11 +393,13 @@
       </div>
 
       <form id="adminLoginForm" style="display:flex; flex-direction:column; gap:12px;">
+        <label for="adminPasskeyInput" class="sr-only">Passkey Admin</label>
         <input
           type="password"
           id="adminPasskeyInput"
           class="url-input"
           placeholder="Masukkan passkey admin..."
+          aria-label="Passkey Admin"
           autocomplete="current-password"
           required
           style="padding: 0 16px; height: 46px;"
@@ -527,7 +534,7 @@
     <div class="admin-modal">
       <div class="modal-header">
         <h3 id="modalTitle" class="modal-title">Edit Komentar</h3>
-        <button type="button" id="btnModalClose" class="btn-action" style="border:none;">&times;</button>
+        <button type="button" id="btnModalClose" class="btn-action" style="border:none;" aria-label="Tutup modal">&times;</button>
       </div>
 
       <form id="commentEditForm" style="display:flex; flex-direction:column; gap:12px;">

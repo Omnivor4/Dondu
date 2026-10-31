@@ -2,7 +2,6 @@ import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.config import settings
@@ -20,7 +19,7 @@ class TestApiHardening(unittest.TestCase):
     def test_security_headers_on_root_and_health(self):
         """Pastikan security headers terpasang di semua respons (termasuk / dan /health)."""
         expected_csp = (
-            "default-src 'self'; img-src 'self' https: http: data:; "
+            "default-src 'self'; img-src 'self' https: data:; "
             "style-src 'self' 'unsafe-inline'; script-src 'self'; "
             "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         )
@@ -33,6 +32,10 @@ class TestApiHardening(unittest.TestCase):
             self.assertEqual(
                 response.headers.get("Permissions-Policy"),
                 "camera=(), microphone=(), geolocation=()",
+            )
+            self.assertEqual(
+                response.headers.get("Strict-Transport-Security"),
+                "max-age=31536000; includeSubDomains; preload",
             )
             self.assertEqual(response.headers.get("Content-Security-Policy"), expected_csp)
 

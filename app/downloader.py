@@ -1,5 +1,4 @@
 import logging
-import re
 import shutil
 import time
 import uuid
@@ -43,7 +42,7 @@ class ProgressTracker:
         self._store: dict[str, TaskProgress] = {}
         self._lock = Lock()
 
-    def update(self, task_id: Optional[str], status: str, percent: float, message: str) -> None:
+    def update(self, task_id: Optional[str], status: str, percent: float = 0.0, message: str = "") -> None:
         if not task_id:
             return
         with self._lock:
@@ -94,9 +93,6 @@ def sanitize_thumbnail_url(url: Optional[str]) -> Optional[str]:
     if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in cleaned):
         return None
     return cleaned
-
-
-_sanitize_thumbnail_url = sanitize_thumbnail_url
 
 
 def get_ffmpeg_path() -> Optional[str]:
@@ -251,6 +247,7 @@ def _base_ytdlp_opts() -> dict[str, Any]:
         "no_warnings": True,
         "noplaylist": True,
         "geo_bypass": True,
+        "cachedir": False,
         "socket_timeout": 20,
         "retries": 3,
         "fragment_retries": 3,

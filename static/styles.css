@@ -748,18 +748,6 @@ body {
   border-radius: 10px;
 }
 
-.comments-tag {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  background-color: var(--bg-subtle);
-  border: 1px solid var(--border-color);
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
 .comment-form {
   display: flex;
   flex-direction: column;

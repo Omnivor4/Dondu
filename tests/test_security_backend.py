@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 
@@ -45,12 +45,12 @@ class TestSecurityBackend(unittest.TestCase):
     def test_rate_limiter_honors_proxy_headers_when_configured(self):
         limiter = SlidingWindowRateLimiter(max_requests=5, window_seconds=60, trust_proxy_headers=True)
 
-        # X-Forwarded-For with multiple IPs: takes the first client IP
+        # X-Forwarded-For with multiple IPs: takes the rightmost (proxy-appended) client IP
         req_xff = MockRequest(
             host="10.0.0.1",
             headers={"x-forwarded-for": "203.0.113.195, 70.41.3.18"},
         )
-        self.assertEqual(limiter.get_client_ip(req_xff), "203.0.113.195")
+        self.assertEqual(limiter.get_client_ip(req_xff), "70.41.3.18")
 
         # X-Real-IP fallback when X-Forwarded-For is not present
         req_xreal = MockRequest(
@@ -70,16 +70,33 @@ class TestSecurityBackend(unittest.TestCase):
         req_spaces = MockRequest(headers={"x-forwarded-for": "  203.0.113.50  "})
         self.assertEqual(limiter.get_client_ip(req_spaces), "203.0.113.50")
 
-        # Truncates IPs exceeding 64 chars
+        # Non-IP string rejected and falls back to socket client host
         oversized = "a" * 100
         req_oversized = MockRequest(headers={"x-forwarded-for": oversized})
         result = limiter.get_client_ip(req_oversized)
-        self.assertEqual(len(result), 64)
-        self.assertEqual(result, "a" * 64)
+        self.assertEqual(result, "127.0.0.1")
 
         # Empty / None client host falls back to "unknown"
         req_empty = MockRequest(host="", headers={})
         self.assertEqual(limiter.get_client_ip(req_empty), "unknown")
+
+    def test_rate_limiter_extracts_rightmost_ip_under_proxy_spoofing(self):
+        """Pastikan rate limiter selalu mengambil IP paling kanan untuk mencegah spoofing X-Forwarded-For."""
+        limiter = SlidingWindowRateLimiter(trust_proxy_headers=True)
+        req = MockRequest(
+            host="10.0.0.1",
+            headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8, 198.51.100.99"},
+        )
+        self.assertEqual(limiter.get_client_ip(req), "198.51.100.99")
+
+    def test_rate_limiter_rejects_malformed_ip_strings(self):
+        """Pastikan string bukan IP valid ditolak dan fallback ke host TCP client."""
+        limiter = SlidingWindowRateLimiter(trust_proxy_headers=True)
+        req = MockRequest(
+            host="192.168.1.10",
+            headers={"x-forwarded-for": "invalid-ip-payload<script>"},
+        )
+        self.assertEqual(limiter.get_client_ip(req), "192.168.1.10")
 
     def test_rate_limiter_blocks_spoofing_bypass_attempts(self):
         # When trust_proxy_headers=False, varying X-Forwarded-For should NOT bypass the limit

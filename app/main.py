@@ -1,8 +1,12 @@
 import asyncio
 import contextlib
+import hashlib
+import hmac
 import logging
 import os
+import secrets
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
@@ -71,6 +75,12 @@ rate_limiter = SlidingWindowRateLimiter(
 progress_rate_limiter = SlidingWindowRateLimiter(
     max_requests=120,
     window_seconds=60,
+    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
+)
+
+admin_login_rate_limiter = SlidingWindowRateLimiter(
+    max_requests=5,
+    window_seconds=300,
     trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
 )
 
@@ -154,8 +164,9 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self' https: http: data:; "
+        "default-src 'self'; img-src 'self' https: data:; "
         "style-src 'self' 'unsafe-inline'; script-src 'self'; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     )
@@ -219,7 +230,17 @@ async def get_video_info(payload: VideoInfoRequest, request: Request) -> VideoIn
         )
     try:
         logger.info("Mengecek informasi media untuk permintaan baru.")
-        return await asyncio.to_thread(extract_video_info, payload.url)
+        info_timeout = float(os.getenv("INFO_TIMEOUT_SECONDS", "30.0"))
+        return await asyncio.wait_for(
+            asyncio.to_thread(extract_video_info, payload.url),
+            timeout=info_timeout,
+        )
+    except asyncio.TimeoutError:
+        logger.error("Proses ekstraksi informasi media melebihi batas waktu (url=%s)", payload.url)
+        raise HTTPException(
+            status_code=504,
+            detail="Proses ekstraksi informasi media melebihi batas waktu yang diizinkan (timeout).",
+        )
     finally:
         info_semaphore.release()
 
@@ -259,12 +280,28 @@ async def download_video_or_audio(payload: DownloadRequest, request: Request) ->
             payload.quality,
         )
 
-        result = await asyncio.to_thread(
-            download_media,
-            payload.url,
-            payload.format_type,
-            payload.quality,
+        download_timeout = float(os.getenv("DOWNLOAD_TIMEOUT_SECONDS", "90.0"))
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                download_media,
+                payload.url,
+                payload.format_type,
+                payload.quality,
+                payload.task_id,
+            ),
+            timeout=download_timeout,
+        )
+    except asyncio.TimeoutError:
+        logger.error("Proses unduhan media timeout (task_id=%s)", payload.task_id)
+        progress_tracker.update(
             payload.task_id,
+            status="error",
+            percent=0.0,
+            message="Proses unduhan melebihi batas waktu (timeout).",
+        )
+        raise HTTPException(
+            status_code=504,
+            detail="Proses pengunduhan media melebihi batas waktu yang diizinkan (timeout).",
         )
     finally:
         download_semaphore.release()
@@ -305,9 +342,57 @@ def _resolve_static_path(filename: str) -> Path:
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+def create_admin_token() -> str:
+    """Membuat token sesi admin stateless bertanda tangan HMAC dengan masa berlaku 24 jam."""
+    ts = int(time.time())
+    sig = hmac.new(
+        settings.ADMIN_SECRET_KEY.encode("utf-8"),
+        f"admin:{ts}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"sess_{ts}_{sig}"
+
+
+def verify_admin_token(token: str) -> bool:
+    """Verifikasi kunci master admin atau token sesi HMAC secara constant-time."""
+    if not token:
+        return False
+    # Verifikasi langsung terhadap kunci master (konstan waktu)
+    if secrets.compare_digest(token, settings.ADMIN_SECRET_KEY):
+        return True
+    # Verifikasi token sesi stateless: sess_{timestamp}_{signature}
+    if token.startswith("sess_"):
+        parts = token.split("_")
+        if len(parts) == 3:
+            try:
+                ts = int(parts[1])
+                # Batasi masa berlaku 24 jam (86400 detik)
+                if abs(time.time() - ts) <= 86400:
+                    expected_sig = hmac.new(
+                        settings.ADMIN_SECRET_KEY.encode("utf-8"),
+                        f"admin:{ts}".encode("utf-8"),
+                        hashlib.sha256,
+                    ).hexdigest()
+                    if secrets.compare_digest(parts[2], expected_sig):
+                        return True
+            except (ValueError, TypeError):
+                pass
+    return False
+
+
 def verify_admin_key(request: Request) -> bool:
-    key = request.headers.get("X-Admin-Key") or request.query_params.get("key")
-    if not key or key != settings.ADMIN_SECRET_KEY:
+    """
+    Otorisasi endpoint admin.
+    Menerima header 'X-Admin-Key' atau 'Authorization: Bearer <token>'.
+    Query parameter (?key=) dinonaktifkan demi keamanan credential pada log web.
+    """
+    key = request.headers.get("X-Admin-Key")
+    if not key:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            key = auth[7:].strip()
+
+    if not key or not verify_admin_token(key):
         raise HTTPException(status_code=401, detail="Kunci otorisasi admin tidak valid.")
     return True
 
@@ -386,11 +471,13 @@ async def create_comment_endpoint(payload: CommentCreateRequest, request: Reques
 # --- Admin Dashboard Endpoints (Protected) ---
 
 @app.post("/api/admin/login", tags=["Admin"])
-async def admin_login_endpoint(payload: AdminLoginRequest):
-    """Verifikasi passkey untuk masuk ke dashboard admin."""
-    if payload.passkey != settings.ADMIN_SECRET_KEY:
+async def admin_login_endpoint(payload: AdminLoginRequest, request: Request):
+    """Verifikasi passkey untuk masuk ke dashboard admin dengan proteksi rate limit dan token stateless."""
+    admin_login_rate_limiter.check(request)
+    if not secrets.compare_digest(payload.passkey, settings.ADMIN_SECRET_KEY):
         raise HTTPException(status_code=401, detail="Passkey admin salah.")
-    return {"status": "ok", "token": settings.ADMIN_SECRET_KEY}
+    session_token = create_admin_token()
+    return {"status": "ok", "token": session_token}
 
 
 @app.get("/api/admin/analytics", tags=["Admin"])

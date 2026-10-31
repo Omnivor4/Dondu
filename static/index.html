@@ -267,22 +267,26 @@
         <!-- Form Tambah Komentar -->
         <form id="commentForm" class="comment-form" novalidate>
           <div class="comment-form-group">
+            <label for="commentAuthorInput" class="sr-only">Nama Anda</label>
             <input
               type="text"
               id="commentAuthorInput"
               class="comment-input"
               placeholder="Nama Anda..."
+              aria-label="Nama Anda"
               maxlength="50"
               autocomplete="name"
               required
             />
           </div>
           <div class="comment-form-group">
+            <label for="commentTextInput" class="sr-only">Tulis komentar atau feedback</label>
             <textarea
               id="commentTextInput"
               class="comment-textarea"
               rows="3"
               placeholder="Tulis komentar atau feedback pengalaman unduhan Anda di sini..."
+              aria-label="Tulis komentar atau feedback"
               maxlength="500"
               required
             ></textarea>

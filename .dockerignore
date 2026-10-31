@@ -5,10 +5,23 @@ __pycache__/
 venv/
 env/
 temp_downloads/
-.env
 .git/
 .gitignore
 *.log
 .DS_Store
 Thumbs.db
 
+# Secrets & Credential Protection
+.env*
+*-firebase-adminsdk-*.json
+firebase*.json
+firestore.*
+
+# Database & Persistent Local Storage
+data/
+*.db
+*.sqlite3
+
+# Agent Working Directories & Documentation
+.agents/
+tests/
